@@ -1,0 +1,60 @@
+Create Database Route:
+Method: POST
+Endpoint: /createdb
+Description: This endpoint is used to create a new BSON file representing a database. It expects a JSON payload containing the database model.
+Input: JSON object representing the Model structure.
+Output: On success, it returns a JSON object with the id of the newly created database. On failure, it returns an error message.
+Read Database Route:
+Method: GET
+Endpoint: /readdb/:id
+Description: Retrieves the entire database model by its ID.
+Input: The id of the database to read.
+Output: Returns the database model as a JSON object or an error message if the database is not found.
+Get Table Route:
+Method: GET
+Endpoint: /:id/:table
+Description: Fetches a specific table from a database identified by id.
+Input: The id of the database and the name of the table.
+Output: Returns the table data as a JSON object or an error message if the table is not found.
+Get Entry Route:
+Method: GET
+Endpoint: /:id/:table/:entry
+Description: Retrieves a specific entry from a table in a database.
+Input: The id of the database, the name of the table, and the entry identifier.
+Output: Returns the entry data as a JSON object or an error message if the entry is not found.
+Update Field Route:
+Method: PUT
+Endpoint: /update-field/:id/:table/:entryId
+Description: Updates a field in an entry of a table in a database.
+Input: The id of the database, the name of the table, the entryId, and a JSON payload with the updated Field.
+Output: Returns a confirmation message on success or an error message on failure.
+Update Entry Route:
+Method: PUT
+Endpoint: /update-entry/:id/:table/:entryId
+Description: Updates an entire entry in a table of a database.
+Input: The id of the database, the name of the table, the entryId, and a JSON payload with the updated Entry.
+Output: Returns a confirmation message on success or an error message on failure.
+Add Entry Route:
+Method: POST
+Endpoint: /add-entry/:id/:table
+Description: Adds a new entry to a table in a database.
+Input: The id of the database, the name of the table, and a JSON payload with the new Entry.
+Output: Returns a confirmation message on success or an error message on failure.
+Add Table Route:
+Method: POST
+Endpoint: /add-table/:id
+Description: Adds a new table to a database.
+Input: The id of the database and a JSON payload with the new Table.
+Output: Returns a confirmation message on success or an error message on failure.
+Delete Database Route:
+Method: DELETE
+Endpoint: /deletedb/:id
+Description: Deletes an entire database.
+Input: The id of the database to delete.
+Output: Returns a confirmation message on success or an error message on failure.
+Delete Table Route:
+Method: DELETE
+Endpoint: /delete-table/:id/:table
+Description: Deletes a specific table from a database.
+Input: The id of the database and the name of the table to delete.
+Output: Returns a confirmation message on success or an error message on failure.

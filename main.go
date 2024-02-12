@@ -9,19 +9,6 @@ import (
   "MinDB/DB"
 )
 
-type Route struct {
-  Method string
-  Path string
-  Description string
-  RequestBody string 
-  Response string 
-}
-
-type Info struct {
-  Message string 
-  Routes []Route
-}
-
 func main() {
 
   err := godotenv.Load()
@@ -34,92 +21,22 @@ func main() {
   apiGroup := router.Group("/api")
 
   router.GET("/", func(c *gin.Context) {
-    routes := []Route{
-      {
-        Method: "GET",
-        Path: "/",
-        Description: "List of all routes",
-        RequestBody: "None",
-        Response: "List of all routes",
-      },
-      {
-        Method: "POST",
-        Path: "/api/createdb",
-        Description: "Create a new database",
-        RequestBody: "send a json object with the structure of the database in the form Model { Tables: [ Table { Name: string, Fields: [ Field { Name: string, DataType: string } ] } ]",
-        Response: "sends back the id of the database created as a string",
-      },
-      {
-        Method: "GET",
-        Path: "/api/readdb/:id",
-        Description: "Read a database",
-        RequestBody: "None",
-        Response: "Sends back json of all the tables in the database",
-      },
-      {
-        Method: "GET",
-        Path: "/api/:id/:table",
-        Description: "Get a table from a database",
-        RequestBody: "None",
-        Response: "Sends back json of the table in the database",
-      },
-      {
-        Method: "GET",
-        Path: "/api/:id/:table/:field",
-        Description: "Get a field from a table",
-        RequestBody: "None",
-        Response: "Sends back json of the field in the table",
-      },
-      {
-        Method: "GET",
-        Path: "/api/:id/:table/:entry",
-        Description: "Get an entry from a table",
-        RequestBody: "None",
-        Response: "Sends back json of the entry in the table",
-      },
-      {
-        Method: "PUT",
-        Path: "/api/update-field/:id/:table/:field",
-        Description: "Update a field in a table",
-        RequestBody: "send a json object with the value to be updated",
-        Response: "Sends back a message",
-      },
-      {
-        Method: "POST",
-        Path: "/api/add-field/:id/:table",
-        Description: "Add a field to a table",
-        RequestBody: "send a json object with the structure of the field in the form Field { Name: string, DataType: string }",
-        Response: "Sends back a message",
-      },
-      {
-        Method: "POST",
-        Path: "/api/add-table/:id",
-        Description: "Add a table to a database",
-        RequestBody: "send a json object with the structure of the table in the form Table { Name: string, Fields: [ Field { Name: string, DataType: string } ] }",
-        Response: "Sends back a message",
-      },
-      {
-        Method: "DELETE",
-        Path: "/api/deletedb/:id",
-        Description: "Delete a database",
-        RequestBody: "None",
-        Response: "Sends back a message",
-      },
-      {
-        Method: "DELETE",
-        Path: "/api/delete-table/:id/:table",
-        Description: "Delete a table from a database",
-        RequestBody: "None",
-        Response: "Sends back a message",
-      },
-    }
-    info := Info{
-      Message: "Welcome to MinDB",
-      Routes: routes,
-    }
-    c.JSON(http.StatusOK, info)
+    c.JSON(http.StatusOK, gin.H{"message":"welcome to BsonDB-API"})
   })
 
+  router.GET("/admin/:password", func(c *gin.Context) {
+    password := c.Param("password")
+    if password == os.Getenv("ADMIN_PASSWORD") {
+      dbs, err := db.GetAllDBs()
+      if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+      }
+      c.JSON(http.StatusOK, dbs)
+      return
+    }
+    c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+  })
 
   apiGroup.POST("/createdb", func(c *gin.Context) {
     var model db.Model
@@ -141,12 +58,12 @@ func main() {
   // Read a entire database
   apiGroup.GET("/readdb/:id", func(c *gin.Context) {
     dbId := c.Param("id")
-    model, err := db.ReadBsonFile(dbId)
+    model, err, size := db.ReadBsonFile(dbId)
     if err != nil {
       c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
       return
     }
-    c.JSON(http.StatusOK, model)
+    c.JSON(http.StatusOK, gin.H{"model": model, "size": size})
   })
   
   // Get a table from a database
@@ -194,6 +111,12 @@ func main() {
     table := c.Param("table")
     entryId := c.Param("entryId")
     var field db.Field
+
+    if c.Request.ContentLength > 1048576 {
+      c.JSON(http.StatusBadRequest, gin.H{"error": "Request size too large"})
+      return
+    }
+
     if err := c.ShouldBindJSON(&field); err != nil {
       fmt.Println("Binding error")
       c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -212,12 +135,18 @@ func main() {
     table := c.Param("table")
     entryId := c.Param("entryId")
     var entry db.Entry
+
+    if c.Request.ContentLength > 1048576 {
+      c.JSON(http.StatusBadRequest, gin.H{"error": "Request size too large"})
+      return
+    }
+
     if err := c.ShouldBindJSON(&entry); err != nil {
       fmt.Println("Binding error")
       c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
       return
     }
-    fmt.Println(entry)
+
     err := db.UpdateEntryInTable(dbId, table, entryId, entry)
     if err != nil {
       c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -231,6 +160,12 @@ func main() {
     dbId := c.Param("id")
     table := c.Param("table")
     var entry db.Entry
+
+    if c.Request.ContentLength > 1048576 {
+      c.JSON(http.StatusBadRequest, gin.H{"error": "Request size too large"})
+      return
+    }
+
     if err := c.ShouldBindJSON(&entry); err != nil {
       fmt.Println("Binding error")
       c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -255,6 +190,12 @@ func main() {
   apiGroup.POST("/add-table/:id", func(c *gin.Context) {
     dbId := c.Param("id")
     var table db.Table
+
+    if c.Request.ContentLength > 1048576 {
+      c.JSON(http.StatusBadRequest, gin.H{"error": "Request size too large"})
+      return
+    }
+
     if err := c.ShouldBindJSON(&table); err != nil {
       fmt.Println("Binding error")
       c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -291,11 +232,11 @@ func main() {
     c.JSON(http.StatusOK, gin.H{"message": "Table deleted"})
   })
 
-
   port := os.Getenv("PORT")
   if port == "" {
     port = "8080"
   }
+
   fmt.Printf("Server started at %s\n", port)
   router.Run(":" + port)
 }

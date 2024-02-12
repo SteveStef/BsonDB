@@ -29,6 +29,11 @@ type Model struct {
   Tables []Table `bson:"tables"`
 }
 
+type AdminData struct {
+  Filename string
+  Size string
+}
+
 var fileMutex sync.Mutex // solves race arounds
 
 // ============================CREATING A NEW DATABASE ======================================== 
@@ -53,30 +58,61 @@ func CreateBsonFile(model Model) (string, error) {
 }
 // =======================READING THE DATA========================================
 
-func ReadBsonFile(dbId string) (Model, error) {
+func GetAllDBs() ([]AdminData, error) {
+	entries, err := os.ReadDir("./storage")
+	if err != nil {
+		return nil, err
+	}
+
+	var dbs []AdminData
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			info, err := entry.Info()
+			if err != nil {
+				fmt.Println("Error getting file info:", err)
+				continue
+			}
+      sizeString := fmt.Sprintf("%d", info.Size()) + " bytes"
+			dbs = append(dbs, AdminData{Filename: info.Name(), Size: sizeString})
+		}
+	}
+	return dbs, nil
+}
+
+func ReadBsonFile(dbId string) (Model, error, int64) {
 
   fileMutex.Lock() // Lock the mutex before accessing the file
   defer fileMutex.Unlock() // Ensure the mutex is always unlocked
 
   var model Model
+
   bsonData, err := ioutil.ReadFile("./storage/db_"+dbId+".bson")
+  sizeOfDataInBytes := len(bsonData)
+
   if err != nil {
     err = fmt.Errorf("File not found")
-    return model, err 
+    return model, err, int64(sizeOfDataInBytes) 
   }
   err = bson.Unmarshal(bsonData, &model)
   if err != nil {
     err = fmt.Errorf("Error occurred during unmarshaling")
-    return model, err
+    return model, err, int64(sizeOfDataInBytes)
   }
-  return model, nil
+
+  return model, nil, int64(sizeOfDataInBytes) 
 }
 
 func GetTable(dbId string, table string) (Table, error) {
-  model, err := ReadBsonFile(dbId)
+  model, err, size := ReadBsonFile(dbId)
+
+  if size > 2000000 {
+    fmt.Println("File size is greater than 2MB")
+  }
+
   if err != nil {
     return Table{}, err
   }
+
   for _, t := range model.Tables {
     if t.Name == table {
       return t, nil
@@ -86,7 +122,10 @@ func GetTable(dbId string, table string) (Table, error) {
 }
 
 func GetEntryFromTable(dbId string, table string, id interface{}) (Entry, error) {
-  model, err := ReadBsonFile(dbId)
+  model, err, size := ReadBsonFile(dbId)
+  if size > 2000000 {
+    fmt.Println("File size is greater than 2MB")
+  }
   if err != nil {
     return Entry{}, err
   }
@@ -105,7 +144,10 @@ func GetEntryFromTable(dbId string, table string, id interface{}) (Entry, error)
 }
 
 func GetFieldFromEntry(dbId string, table string, entryId interface{}, field string) (Field, error) {
-  model, err := ReadBsonFile(dbId)
+  model, err, size := ReadBsonFile(dbId)
+  if size > 2000000 {
+    fmt.Println("File size is greater than 2MB")
+  }
   if err != nil {
     return Field{}, err
   }
@@ -130,11 +172,15 @@ func GetFieldFromEntry(dbId string, table string, entryId interface{}, field str
 // =======================UPDATING THE DATA========================================
 
 func AddTableToDb(dbId string, table Table) error {
-  // make sure table does not exist
-  model, err := ReadBsonFile(dbId)
+  model, err, size := ReadBsonFile(dbId)
+  if size > 2000000 {
+    return fmt.Errorf("File size is greater than 2MB")
+  }
+
   if err != nil {
     return err
   }
+
   for _, t := range model.Tables {
     if t.Name == table.Name {
       return fmt.Errorf("Table already exists")
@@ -158,9 +204,9 @@ func AddTableToDb(dbId string, table Table) error {
 
 func AddEntryToTable(dbId string, table string, entry Entry) error {
   // Make sure table exists
-  model, err := ReadBsonFile(dbId)
-  if err != nil {
-    return err
+  model, err, size := ReadBsonFile(dbId)
+  if size > 2000000 {
+    return fmt.Errorf("File size is greater than 2MB")
   }
 
   // Find the index of the target table
@@ -221,7 +267,11 @@ func AddEntryToTable(dbId string, table string, entry Entry) error {
 }
 
 func UpdateEntryInTable(dbId string, table string, entryId interface{}, entry Entry) error {
-  model, err := ReadBsonFile(dbId)
+  model, err, size := ReadBsonFile(dbId)
+  if size > 2000000 {
+    return fmt.Errorf("File size is greater than 2MB")
+  }
+
   if err != nil {
     return err
   }
@@ -251,7 +301,11 @@ func UpdateEntryInTable(dbId string, table string, entryId interface{}, entry En
 }
 
 func UpdateFieldInTable(dbId string, table string, entryId interface{}, field Field) error {
-  model, err := ReadBsonFile(dbId)
+  model, err, size := ReadBsonFile(dbId)
+  if size > 2000000 {
+    return fmt.Errorf("File size is greater than 2MB")
+  }
+
   if err != nil {
     return err
   }
@@ -287,7 +341,10 @@ func UpdateFieldInTable(dbId string, table string, entryId interface{}, field Fi
 // =======================DELETING THE DATA========================================
 
 func DeleteTableFromDb(dbId string, table string) error {
-  model, err := ReadBsonFile(dbId)
+  model, err, size:= ReadBsonFile(dbId)
+  if size > 2000000 {
+    fmt.Println("File size is greater than 2MB")
+  }
   if err != nil {
     return err
   }

@@ -9,20 +9,10 @@ import (
   "sync"
 )
 
-type Field struct {
-  Key string `bson:"name"`
-  Value    interface{} `bson:"value"`
-}
-
-type Entry struct {
-  Id interface{} `bson:"id"`
-  Fields []Field `bson:"fields"`
-}
-
 type Table struct {
   Name string `bson:"name"`
   Requires []string `bson:"keys"`
-  Entries []Entry `bson:"entries"`
+  Entries map[string]map[string]interface{}`bson:"entries"`
 }
 
 type Model struct {
@@ -30,358 +20,332 @@ type Model struct {
 }
 
 type AdminData struct {
-  Filename string
+  Directory string
   Size string
 }
 
 var fileMutex sync.Mutex // solves race arounds
 
 // ============================CREATING A NEW DATABASE ======================================== 
-func CreateBsonFile(model Model) (string, error) {
-
+func CreateBsonFile() (string, error) {
   var dbId string
   dbId = uuid.New().String()
-
-  bsonData, err := bson.Marshal(model)
-	if err != nil {
-    err = fmt.Errorf("Error occurred during marshaling")
-    return dbId, err
-	}
-  var nameOfDb string = "./storage/db_"+dbId+".bson"
-  err = ioutil.WriteFile(nameOfDb, bsonData, 0644)
-	if err != nil {
-    err = fmt.Errorf("Error occurred during writing to file")
-    return dbId, err
-	}
-  fmt.Println("File created")
+  var nameOfDb string = "db_"+dbId
+  err := os.Mkdir("./storage/"+nameOfDb, 0744)
+  if err != nil {
+    return "", err
+  }
   return dbId, nil
 }
 // =======================READING THE DATA========================================
 
 func GetAllDBs() ([]AdminData, error) {
-	entries, err := os.ReadDir("./storage")
-	if err != nil {
-		return nil, err
-	}
-
-	var dbs []AdminData
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			info, err := entry.Info()
-			if err != nil {
-				fmt.Println("Error getting file info:", err)
-				continue
-			}
-      sizeString := fmt.Sprintf("%d", info.Size()) + " bytes"
-			dbs = append(dbs, AdminData{Filename: info.Name(), Size: sizeString})
-		}
-	}
-	return dbs, nil
-}
-
-func ReadBsonFile(dbId string) (Model, error, int64) {
-
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
-
-  var model Model
-
-  bsonData, err := ioutil.ReadFile("./storage/db_"+dbId+".bson")
-  sizeOfDataInBytes := len(bsonData)
-
+  files, err := ioutil.ReadDir("./storage")
   if err != nil {
-    err = fmt.Errorf("File not found")
-    return model, err, int64(sizeOfDataInBytes) 
+    return []AdminData{}, err
   }
-  err = bson.Unmarshal(bsonData, &model)
-  if err != nil {
-    err = fmt.Errorf("Error occurred during unmarshaling")
-    return model, err, int64(sizeOfDataInBytes)
-  }
-
-  return model, nil, int64(sizeOfDataInBytes) 
-}
-
-func GetTable(dbId string, table string) (Table, error) {
-  model, err, size := ReadBsonFile(dbId)
-
-  if size > 2000000 {
-    fmt.Println("File size is greater than 2MB")
-  }
-
-  if err != nil {
-    return Table{}, err
-  }
-
-  for _, t := range model.Tables {
-    if t.Name == table {
-      return t, nil
-    }
-  }
-  return Table{}, fmt.Errorf("Table not found")
-}
-
-func GetEntryFromTable(dbId string, table string, id interface{}) (Entry, error) {
-  model, err, size := ReadBsonFile(dbId)
-  if size > 2000000 {
-    fmt.Println("File size is greater than 2MB")
-  }
-  if err != nil {
-    return Entry{}, err
-  }
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
-  for _, t := range model.Tables {
-    if t.Name == table {
-      for _, e := range t.Entries {
-        if e.Id == id {
-          return e, nil
-        }
+  var dbs []AdminData
+  for _, f := range files {
+    if f.IsDir() {
+      var adminData AdminData
+      adminData.Directory = f.Name()
+      dirPath := fmt.Sprintf("./storage/%s", f.Name())
+      dirSize, err := calculateDirSize(dirPath)
+      if err != nil {
+        return []AdminData{}, err
       }
+      dirSize += f.Size()
+      adminData.Size = fmt.Sprintf("%d bytes", dirSize)
+      dbs = append(dbs, adminData)
     }
   }
-  return Entry{}, fmt.Errorf("No Entries with that id")
+  return dbs, nil
 }
 
-func GetFieldFromEntry(dbId string, table string, entryId interface{}, field string) (Field, error) {
-  model, err, size := ReadBsonFile(dbId)
-  if size > 2000000 {
-    fmt.Println("File size is greater than 2MB")
-  }
+func calculateDirSize(dirpath string) (int64, error) {
+  var dirsize int64
+  files, err := ioutil.ReadDir(dirpath)
   if err != nil {
-    return Field{}, err
+    return   0, err
   }
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
-  for _, t := range model.Tables {
-    if t.Name == table {
-      for _, e := range t.Entries {
-        if e.Id == entryId {
-          for _, f := range e.Fields {
-            if f.Key == field {
-              return f, nil
-            }
-          }
-        }
-      }
+  for _, file := range files {
+    if !file.IsDir() && file.Mode().IsRegular() {
+      dirsize += file.Size()
     }
   }
-  return Field{}, fmt.Errorf("Field not found")
+  return dirsize, nil
+}
+
+// reads th entire database
+func ReadBsonFile(directory string) (Model, error, int64) {
+  fileMutex.Lock() // Lock the mutex before accessing the file
+  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+
+  model := Model{}
+  tables := []Table{}
+  size := int64(4096)
+
+  data, err := ioutil.ReadDir("./storage/db_"+directory)
+  if err != nil {
+    return Model{}, err, 0
+  }
+  for _, file := range data {
+    if file.IsDir() {
+      return model, fmt.Errorf("Directory found instead of file"), 0
+    }
+    fileData, err := ioutil.ReadFile("./storage/db_"+directory+"/"+file.Name())
+    size += file.Size()
+    if err != nil {
+      return model, err, 0
+    }
+    table := Table{}
+    err = bson.Unmarshal(fileData, &table)
+    if err != nil {
+      return model, err, 0
+    }
+    tables = append(tables, table)
+  }
+  model = Model{Tables: tables}
+  return model, nil, size 
+}
+
+func GetTable(directoryId string, table string) (Table, error) {
+  fileMutex.Lock() // Lock the mutex before accessing the file
+  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+  tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", directoryId, table)
+  fileData, err := ioutil.ReadFile(tableFile)
+  if err != nil {
+    return Table{}, fmt.Errorf("Table not found") 
+  }
+  var tableData Table
+  err = bson.Unmarshal(fileData, &tableData)
+  if err != nil {
+    return Table{}, fmt.Errorf("Error occurred during unmarshaling")
+  }
+  return tableData, nil
+}
+
+func GetEntryFromTable(directoryId string, table string, entryId string) (map[string]interface{}, error) {
+  fileMutex.Lock() // Lock the mutex before accessing the file
+  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+  tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", directoryId, table)
+  fileData, err := ioutil.ReadFile(tableFile)
+  if err != nil {
+    return map[string]interface{}{}, fmt.Errorf("Table not found")
+  }
+  var tableData Table
+  err = bson.Unmarshal(fileData, &tableData)
+  if err != nil {
+    return map[string]interface{}{}, fmt.Errorf("Error occurred during unmarshaling")
+  }
+
+  if val, ok := tableData.Entries[entryId]; ok {
+    return val, nil
+  }
+
+  return map[string]interface{}{}, fmt.Errorf("Entry not found")
+}
+
+func GetFieldFromEntry(dbId string, table string, entryId string, field string) (interface{}, error) {
+  fileMutex.Lock() // Lock the mutex before accessing the file
+  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+  tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
+  fileData, err := ioutil.ReadFile(tableFile)
+  if err != nil {
+    return nil, fmt.Errorf("Table not found")
+  }
+  var tableData Table
+  err = bson.Unmarshal(fileData, &tableData)
+  if err != nil {
+    return nil, fmt.Errorf("Error occurred during unmarshaling")
+  }
+
+  if val, ok := tableData.Entries[entryId][field]; ok {
+    return val, nil
+  }
+
+  return nil, fmt.Errorf("Field not found")
 }
 
 // =======================UPDATING THE DATA========================================
 
-func AddTableToDb(dbId string, table Table) error {
-  model, err, size := ReadBsonFile(dbId)
-  if size > 2000000 {
-    return fmt.Errorf("File size is greater than 2MB")
-  }
-
-  if err != nil {
-    return err
-  }
-
-  for _, t := range model.Tables {
-    if t.Name == table.Name {
-      return fmt.Errorf("Table already exists")
-    }
-  }
-
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
-
-  model.Tables = append(model.Tables, table)
-  bsonData, err := bson.Marshal(model)
+func AddTableToDb(directory string, table Table) error {
+  fileMutex.Lock() 
+  defer fileMutex.Unlock() 
+  bsonData, err := bson.Marshal(table)
   if err != nil {
     return fmt.Errorf("Error occurred during marshaling")
   }
-  err = ioutil.WriteFile("./storage/db_"+dbId+".bson", bsonData, 0644)
+  err = ioutil.WriteFile("./storage/db_"+directory+"/"+table.Name+".bson", bsonData, 0644)
   if err != nil {
     return fmt.Errorf("Error occurred during writing to file")
   }
   return nil
 }
 
-func AddEntryToTable(dbId string, table string, entry Entry) error {
-  // Make sure table exists
-  model, err, size := ReadBsonFile(dbId)
-  if size > 2000000 {
-    return fmt.Errorf("File size is greater than 2MB")
-  }
-
-  // Find the index of the target table
-  var tableIndex int
-  found := false
-
-
-  for idx, t := range model.Tables {
-    if t.Name == table {
-      tableIndex = idx
-      found = true
-      break
-    }
-  }
-
-  if !found {
+func AddEntryToTable(dbId string, table string, entryId string, entry map[string]interface{}) error {
+  tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
+  fileData, err := ioutil.ReadFile(tableFile)
+  if err != nil {
     return fmt.Errorf("Table not found")
   }
+  var tableData Table
+  err = bson.Unmarshal(fileData, &tableData)
+  if err != nil {
+    return fmt.Errorf("Error occurred during unmarshaling")
+  }
 
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
-  // Reference to the target table
-  targetTable := &model.Tables[tableIndex]
+  if _, ok := tableData.Entries[entryId]; ok {
+    return fmt.Errorf("Entry already exists")
+  }
 
-  // Validate the entry against the requirements of the target table
-  for _, e := range targetTable.Entries {
-    if e.Id == entry.Id {
-      return fmt.Errorf("Id already exists for an existing entry")
+  // make sure that the entry has all the required fields
+  for _, requiredField := range tableData.Requires {
+    if _, ok := entry[requiredField]; !ok {
+      return fmt.Errorf("Entry does not have required field: " + requiredField)
     }
   }
 
-  count :=  0
-  for _, f := range entry.Fields {
-    for _, r := range targetTable.Requires {
-      if f.Key == r {
-        count++
-        break
-      }
-    }
-  }
-  fmt.Println(count)
-  if count < len(targetTable.Requires) {
-    return fmt.Errorf("Not all required fields are present in the entry")
-  }
-  // Append the entry to the target table's entries
-  targetTable.Entries = append(targetTable.Entries, entry)
-
-  // Marshal the model back into BSON and save it
-  bsonData, err := bson.Marshal(model)
+  tableData.Entries[entryId] = entry
+  bsonData, err := bson.Marshal(tableData)
   if err != nil {
     return fmt.Errorf("Error occurred during marshaling")
   }
-  err = ioutil.WriteFile("./storage/db_"+dbId+".bson", bsonData,  0644)
+  err = ioutil.WriteFile(tableFile, bsonData, 0644)
   if err != nil {
     return fmt.Errorf("Error occurred during writing to file")
   }
   return nil
 }
 
-func UpdateEntryInTable(dbId string, table string, entryId interface{}, entry Entry) error {
-  model, err, size := ReadBsonFile(dbId)
-  if size > 2000000 {
-    return fmt.Errorf("File size is greater than 2MB")
-  }
-
+func UpdateEntryInTable(dbId string, table string, entryId string, entry map[string]interface{}) error {
+  tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
+  fileData, err := ioutil.ReadFile(tableFile)
   if err != nil {
-    return err
+    return fmt.Errorf("Table not found")
+  }
+  var tableData Table
+  err = bson.Unmarshal(fileData, &tableData)
+  if err != nil {
+    return fmt.Errorf("Error occurred during unmarshaling")
   }
 
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
-  for idx, t := range model.Tables {
-    if t.Name == table {
-      for i, e := range t.Entries {
-        if e.Id == entryId {
-          fmt.Println("Entry found at index", entryId, i)
-          model.Tables[idx].Entries[i] = entry
-          bsonData, err := bson.Marshal(model)
-          if err != nil {
-            return fmt.Errorf("Error occurred during marshaling sir")
-          }
-          err = ioutil.WriteFile("./storage/db_"+dbId+".bson", bsonData, 0644)
-          if err != nil {
-            return fmt.Errorf("Error occurred during writing to file")
-          }
-          return nil
-        }
-      }
+  if _, ok := tableData.Entries[entryId]; !ok {
+    return fmt.Errorf("Entry not found")
+  }
+
+  // make sure that the entry has all the required fields
+  for _, requiredField := range tableData.Requires {
+    if _, ok := entry[requiredField]; !ok {
+      return fmt.Errorf("Entry does not have required field: " + requiredField)
     }
   }
-  return fmt.Errorf("Entry not found")
+
+
+  tableData.Entries[entryId] = entry
+  bsonData, err := bson.Marshal(tableData)
+  if err != nil {
+    return fmt.Errorf("Error occurred during marshaling")
+  }
+  err = ioutil.WriteFile(tableFile, bsonData, 0644)
+  if err != nil {
+    return fmt.Errorf("Error occurred during writing to file")
+  }
+  return nil
 }
 
-func UpdateFieldInTable(dbId string, table string, entryId interface{}, field Field) error {
-  model, err, size := ReadBsonFile(dbId)
-  if size > 2000000 {
-    return fmt.Errorf("File size is greater than 2MB")
-  }
-
+func UpdateFieldInTable(dbId string, table string, entryId string, obj map[string]interface{}) error {
+  tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
+  fileData, err := ioutil.ReadFile(tableFile)
   if err != nil {
-    return err
+    return fmt.Errorf("Table not found")
+  }
+  var tableData Table
+  err = bson.Unmarshal(fileData, &tableData)
+  if err != nil {
+    return fmt.Errorf("Error occurred during unmarshaling")
   }
 
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+  if _, ok := tableData.Entries[entryId]; !ok {
+    return fmt.Errorf("Entry not found")
+  }
 
-  for idx, t := range model.Tables {
-    if t.Name == table {
-      for i, e := range t.Entries {
-        if e.Id == entryId {
-          for j, f := range e.Fields {
-            if f.Key == field.Key {
-              model.Tables[idx].Entries[i].Fields[j].Value = field.Value
-              bsonData, err := bson.Marshal(model)
-              if err != nil {
-                return fmt.Errorf("Error occurred during marshaling")
-              }
-              err = ioutil.WriteFile("./storage/db_"+dbId+".bson", bsonData, 0644)
-              if err != nil {
-                return fmt.Errorf("Error occurred during writing to file")
-              }
-              return nil
-            }
-          }
-        }
-      }
+  // if the entry has the field, update it
+  for key, value := range obj {
+    if _, ok := tableData.Entries[entryId][key]; ok {
+      tableData.Entries[entryId][key] = value
+    } else {
+      return fmt.Errorf("Field not found")
     }
   }
-  return fmt.Errorf("Field not found")
+
+  bsonData, err := bson.Marshal(tableData)
+  if err != nil {
+    return fmt.Errorf("Error occurred during marshaling")
+  }
+  err = ioutil.WriteFile(tableFile, bsonData, 0644)
+  if err != nil {
+    return fmt.Errorf("Error occurred during writing to file")
+  }
+  return nil
 }
 
 // =======================DELETING THE DATA========================================
 
 func DeleteTableFromDb(dbId string, table string) error {
-  model, err, size:= ReadBsonFile(dbId)
-  if size > 2000000 {
-    fmt.Println("File size is greater than 2MB")
-  }
-  if err != nil {
-    return err
-  }
-
   fileMutex.Lock() // Lock the mutex before accessing the file
   defer fileMutex.Unlock() // Ensure the mutex is always unlocked
 
-  for idx, t := range model.Tables {
-    if t.Name == table {
-      model.Tables = append(model.Tables[:idx], model.Tables[idx+1:]...)
-      bsonData, err := bson.Marshal(model)
-      if err != nil {
-        return fmt.Errorf("Error occurred during marshaling")
-      }
-      err = ioutil.WriteFile("./storage/db_"+dbId+".bson", bsonData, 0644)
-      if err != nil {
-        return fmt.Errorf("Error occurred during writing to file")
-      }
-      return nil
-    }
-  }
-  return fmt.Errorf("Table not found")
-}
-
-func DeleteBsonFile(dbId string) error {
-
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
-
-  err := ioutil.WriteFile("./storage/db_"+dbId+".bson", []byte(""), 0644)
+  err := ioutil.WriteFile("./storage/db_"+dbId+"/"+table+".bson", []byte(""), 0644)
   if err != nil {
     return fmt.Errorf("Error occurred during deleting file")
   }
-  removeFileErr := os.Remove("./storage/db_"+dbId+".bson")
+  removeFileErr := os.Remove("./storage/db_"+dbId+"/"+table+".bson")
   if removeFileErr != nil {
     return fmt.Errorf("Error occurred during deleting file")
   }
   return nil
 }
 
+func DeleteEntryFromTable(dbId string, table string, entryId string) error {
+  fileMutex.Lock() // Lock the mutex before accessing the file
+  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+
+  tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
+  fileData, err := ioutil.ReadFile(tableFile)
+  if err != nil {
+    return fmt.Errorf("Table not found")
+  }
+  var tableData Table
+  err = bson.Unmarshal(fileData, &tableData)
+  if err != nil {
+    return fmt.Errorf("Error occurred during unmarshaling")
+  }
+
+  if _, ok := tableData.Entries[entryId]; !ok {
+    return fmt.Errorf("Entry not found")
+  }
+
+  delete(tableData.Entries, entryId)
+  bsonData, err := bson.Marshal(tableData)
+  if err != nil {
+    return fmt.Errorf("Error occurred during marshaling")
+  }
+  err = ioutil.WriteFile(tableFile, bsonData, 0644)
+  if err != nil {
+    return fmt.Errorf("Error occurred during writing to file")
+  }
+  return nil
+}
+
+func DeleteBsonFile(dbId string) error {
+  fileMutex.Lock() // Lock the mutex before accessing the file
+  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+
+  // remove directory
+  err := os.RemoveAll("./storage/db_"+dbId)
+  if err != nil {
+    return fmt.Errorf("Error occurred during deleting file")
+  }
+  return nil
+}

@@ -39,19 +39,11 @@ func main() {
   })
 
   apiGroup.POST("/createdb", func(c *gin.Context) {
-    var model db.Model
-
-    if err := c.ShouldBindJSON(&model); err != nil {
-      fmt.Println("Binding error")
-      c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-      return
-    }
-    dbId, err := db.CreateBsonFile(model)
+    dbId, err := db.CreateBsonFile()
     if err != nil {
       c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
       return
     }
-
     c.JSON(http.StatusOK, gin.H{"id": dbId})
   })
 
@@ -110,19 +102,19 @@ func main() {
     dbId := c.Param("id")
     table := c.Param("table")
     entryId := c.Param("entryId")
-    var field db.Field
+    var obj map[string]interface{}
 
     if c.Request.ContentLength > 1048576 {
       c.JSON(http.StatusBadRequest, gin.H{"error": "Request size too large"})
       return
     }
 
-    if err := c.ShouldBindJSON(&field); err != nil {
+    if err := c.ShouldBindJSON(&obj); err != nil {
       fmt.Println("Binding error")
       c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
       return
     }
-    err := db.UpdateFieldInTable(dbId, table, entryId, field)
+    err := db.UpdateFieldInTable(dbId, table, entryId, obj)
     if err != nil {
       c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
       return
@@ -130,11 +122,12 @@ func main() {
     c.JSON(http.StatusOK, gin.H{"message": "Field updated"})
   })
 
+
   apiGroup.PUT("/update-entry/:id/:table/:entryId", func(c *gin.Context) {
     dbId := c.Param("id")
     table := c.Param("table")
     entryId := c.Param("entryId")
-    var entry db.Entry
+    var entry map[string]interface{} 
 
     if c.Request.ContentLength > 1048576 {
       c.JSON(http.StatusBadRequest, gin.H{"error": "Request size too large"})
@@ -156,10 +149,11 @@ func main() {
   })
 
   // Add a field to a table
-  apiGroup.POST("/add-entry/:id/:table", func(c *gin.Context) {
+  apiGroup.POST("/add-entry/:id/:table/:entryId", func(c *gin.Context) {
     dbId := c.Param("id")
     table := c.Param("table")
-    var entry db.Entry
+    entryId := c.Param("entryId")
+    var entry map[string]interface{}
 
     if c.Request.ContentLength > 1048576 {
       c.JSON(http.StatusBadRequest, gin.H{"error": "Request size too large"})
@@ -172,17 +166,12 @@ func main() {
       return
     }
 
-    if entry.Id == "" || entry.Id == nil {
-      c.JSON(http.StatusBadRequest, gin.H{"error": "Id is required"})
-      return
-    }
-
-    fmt.Println(entry)
-    err := db.AddEntryToTable(dbId, table, entry)
+    err := db.AddEntryToTable(dbId, table, entryId, entry)
     if err != nil {
       c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
       return
     }
+
     c.JSON(http.StatusOK, gin.H{"message": "Entry added"})
   })
 
@@ -201,6 +190,7 @@ func main() {
       c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
       return
     }
+
     err := db.AddTableToDb(dbId, table)
     if err != nil {
       c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -230,6 +220,19 @@ func main() {
       return
     }
     c.JSON(http.StatusOK, gin.H{"message": "Table deleted"})
+  })
+
+  // delete an entry from a table
+  apiGroup.DELETE("/delete-entry/:id/:table/:entry", func(c *gin.Context) {
+    dbId := c.Param("id")
+    table := c.Param("table")
+    entry := c.Param("entry")
+    err := db.DeleteEntryFromTable(dbId, table, entry)
+    if err != nil {
+      c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+      return
+    }
+    c.JSON(http.StatusOK, gin.H{"message": "Entry deleted"})
   })
 
   port := os.Getenv("PORT")

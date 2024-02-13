@@ -7,13 +7,12 @@ import (
 	"net/http"
   "fmt"
   "MinDB/DB"
-  "sync"
 )
 
-var ipDatabaseMap sync.Map
-
 func checkRequestSize(c *gin.Context) {
+  fmt.Println("=====================================")
   fmt.Println("Size of incomming request: ", c.Request.ContentLength, "bytes")
+  fmt.Println("=====================================")
   const MB = 1048576
   if c.Request.ContentLength > MB { 
     c.JSON(http.StatusBadRequest, gin.H{"error": "Request size too large, max is 1MB"})
@@ -40,35 +39,20 @@ func main() {
   router.GET("/admin/:password", func(c *gin.Context) {
     password := c.Param("password")
     if password == os.Getenv("ADMIN_PASSWORD") {
-      ip := c.ClientIP()
-
-      fmt.Println("IP of request:", ip)
-
-      if ip != os.Getenv("ADMIN_IP") {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "You may know the password, but you need to try harder to get in :)"})
-        return
-      }
       dbs, err := db.GetAllDBs()
       if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
         return
       }
-      c.JSON(http.StatusOK, gin.H{"ip": ip, "dbs": dbs})
+      c.JSON(http.StatusOK, gin.H{"dbs": dbs})
       return
     }
     c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
   })
 
   apiGroup.POST("/createdb", func(c *gin.Context) {
-    clientIP := c.ClientIP()
-    if err != nil {
-      c.JSON(http.StatusBadRequest, gin.H{"error": "Could not determine client IP address"})
-      return
-    }
-
-    _, loaded := ipDatabaseMap.LoadOrStore(clientIP, true)
-    if loaded {
-      c.JSON(http.StatusForbidden, gin.H{"error": "This IP address has already created a database"})
+    if c.GetHeader("Authorization") != os.Getenv("ADMIN_PASSWORD") {
+      c.JSON(http.StatusUnauthorized, gin.H{"error": "Unable to create database, Please go to the BsonDB website the create one."})
       return
     }
 
@@ -85,7 +69,7 @@ func main() {
     dbId := c.Param("id")
     model, err, size := db.ReadBsonFile(dbId)
     if err != nil {
-      c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+      c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not found"})
       return
     }
     c.JSON(http.StatusOK, gin.H{"model": model, "size": size})
@@ -220,15 +204,17 @@ func main() {
   // delete entire database
   apiGroup.DELETE("/deletedb/:id", func(c *gin.Context) {
     dbId := c.Param("id")
+
+    auhtorization := c.GetHeader("Authorization")
+    if auhtorization != os.Getenv("ADMIN_PASSWORD") {
+      c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized, go to the BsobDB website to delete a database."})
+      return
+    }
+
     err := db.DeleteBsonFile(dbId)
     if err != nil {
       c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
       return
-    }
-
-    clientIP := c.ClientIP()
-    if _, ok := ipDatabaseMap.Load(clientIP); ok {
-      ipDatabaseMap.Delete(clientIP)
     }
 
     c.JSON(http.StatusOK, gin.H{"message": "Database deleted"})

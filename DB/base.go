@@ -28,15 +28,19 @@ var fileMutex sync.Mutex // solves race arounds
 
 // ============================CREATING A NEW DATABASE ======================================== 
 func CreateBsonFile() (string, error) {
+
   var dbId string
   dbId = uuid.New().String()
+
   var nameOfDb string = "db_"+dbId
   err := os.Mkdir("./storage/"+nameOfDb, 0744)
   if err != nil {
     return "", err
   }
+
   return dbId, nil
 }
+
 // =======================READING THE DATA========================================
 
 func GetAllDBs() ([]AdminData, error) {
@@ -342,10 +346,10 @@ func DeleteBsonFile(dbId string) error {
   fileMutex.Lock() // Lock the mutex before accessing the file
   defer fileMutex.Unlock() // Ensure the mutex is always unlocked
 
-  // remove directory
   err := os.RemoveAll("./storage/db_"+dbId)
   if err != nil {
-    return fmt.Errorf("Error occurred during deleting file")
+    return fmt.Errorf("Error occurred during deleting directory")
   }
+
   return nil
 }

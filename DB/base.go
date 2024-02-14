@@ -9,6 +9,20 @@ import (
   "sync"
 )
 
+
+// ============================STRUCTS=======================================
+
+
+type Accounts struct {
+  AccountData []Account `bson:"accounts"`
+}
+
+type Account struct {
+  Email string `bson:"email"`
+  Database string `bson:"database"`
+  Size string
+}
+
 type Table struct {
   Name string `bson:"name"`
   Requires []string `bson:"keys"`
@@ -20,20 +34,29 @@ type Model struct {
 }
 
 type AdminData struct {
-  Directory string
+  UserAccounts []Account
   Size string
 }
 
 var fileMutex sync.Mutex // solves race arounds
 
 // ============================CREATING A NEW DATABASE ======================================== 
-func CreateBsonFile() (string, error) {
+func CreateBsonFile(email string) (string, error) {
 
   var dbId string
   dbId = uuid.New().String()
 
+  database, err := AddAccount(email, dbId)
+  if err != nil {
+    return "", fmt.Errorf("Error occurred during adding account: %v", err)
+  }
+
+  if database != "" {
+    return database, nil
+  }
+
   var nameOfDb string = "db_"+dbId
-  err := os.Mkdir("./storage/"+nameOfDb, 0744)
+  err = os.Mkdir("./storage/"+nameOfDb, 0744)
   if err != nil {
     return "", err
   }
@@ -41,29 +64,95 @@ func CreateBsonFile() (string, error) {
   return dbId, nil
 }
 
-// =======================READING THE DATA========================================
 
-func GetAllDBs() ([]AdminData, error) {
-  files, err := ioutil.ReadDir("./storage")
+func AddAccount(email string, dbId string) (string, error) {
+  fileMutex.Lock() // Lock the mutex before accessing the file
+  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+  var accounts Accounts
+  fileData, err := ioutil.ReadFile("./accounts/accounts.bson")
   if err != nil {
-    return []AdminData{}, err
+    return "", err
   }
-  var dbs []AdminData
-  for _, f := range files {
-    if f.IsDir() {
-      var adminData AdminData
-      adminData.Directory = f.Name()
-      dirPath := fmt.Sprintf("./storage/%s", f.Name())
-      dirSize, err := calculateDirSize(dirPath)
-      if err != nil {
-        return []AdminData{}, err
-      }
-      dirSize += f.Size()
-      adminData.Size = fmt.Sprintf("%d bytes", dirSize)
-      dbs = append(dbs, adminData)
+  err = bson.Unmarshal(fileData, &accounts)
+  if err != nil {
+    return "", fmt.Errorf("Error occurred during unmarshaling: %v", err)
+  }
+  for _, account := range accounts.AccountData {
+    if account.Email == email {
+      return account.Database, nil
     }
   }
-  return dbs, nil
+  accounts.AccountData = append(accounts.AccountData, Account{Email: email, Database: dbId})
+  doc := bson.M{"accounts": accounts.AccountData}
+  data, err := bson.Marshal(doc)
+  if err != nil {
+    return "", err
+  }
+  err = ioutil.WriteFile("./accounts/accounts.bson", data,  0644)
+  if err != nil {
+    return "", fmt.Errorf("Error occurred during writing to file: %v", err) 
+  }
+  return "", nil
+}
+
+func DeleteAccount(email string) error {
+  fileMutex.Lock() // Lock the mutex before accessing the file
+  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+  var accounts Accounts
+  fileData, err := ioutil.ReadFile("./accounts/accounts.bson")
+  if err != nil {
+    return err
+  }
+  err = bson.Unmarshal(fileData, &accounts)
+  if err != nil {
+    return fmt.Errorf("Error occurred during unmarshaling: %v", err)
+  }
+  for i, account := range accounts.AccountData {
+    if account.Email == email {
+      accounts.AccountData = append(accounts.AccountData[:i], accounts.AccountData[i+1:]...)
+      doc := bson.M{"accounts": accounts.AccountData}
+      data, err := bson.Marshal(doc)
+      if err != nil {
+        return err
+      }
+      err = ioutil.WriteFile("./accounts/accounts.bson", data,  0644)
+      if err != nil {
+        return fmt.Errorf("Error occurred during writing to file: %v", err) 
+      }
+      return nil
+    }
+  }
+  return fmt.Errorf("Account not found")
+}
+
+// =======================READING THE DATA========================================
+
+
+func GetAllDBs() (Accounts, error) {
+  fileMutex.Lock() // Lock the mutex before accessing the file
+  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+  // read all the accounts and put them in Accounts varaible
+  var accounts Accounts
+  fileData, err := ioutil.ReadFile("./accounts/accounts.bson")
+  if err != nil {
+    return Accounts{}, err
+  }
+  err = bson.Unmarshal(fileData, &accounts)
+  if err != nil {
+    return Accounts{}, fmt.Errorf("Error occurred during unmarshaling: %v", err)
+  }
+  
+  // loop through all the accounts and get the size of the database
+  for i, account := range accounts.AccountData {
+    size, err := calculateDirSize("./storage/db_"+account.Database)
+    if err != nil {
+      return Accounts{}, fmt.Errorf("Error occurred during calculating size: %v", err)
+    }
+    size += 4096
+    accounts.AccountData[i].Size = fmt.Sprintf("%d", size)
+    accounts.AccountData[i].Size += " bytes"
+  }
+  return accounts, nil
 }
 
 func calculateDirSize(dirpath string) (int64, error) {
@@ -180,6 +269,12 @@ func AddTableToDb(directory string, table Table) error {
   if err != nil {
     return fmt.Errorf("Error occurred during marshaling")
   }
+  // make sure that the table does not already exist
+  _, err = ioutil.ReadFile("./storage/db_"+directory+"/"+table.Name+".bson")
+  if err == nil {
+    return fmt.Errorf("Table already exists")
+  }
+
   err = ioutil.WriteFile("./storage/db_"+directory+"/"+table.Name+".bson", bsonData, 0644)
   if err != nil {
     return fmt.Errorf("Error occurred during writing to file")
@@ -342,11 +437,14 @@ func DeleteEntryFromTable(dbId string, table string, entryId string) error {
   return nil
 }
 
-func DeleteBsonFile(dbId string) error {
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+func DeleteBsonFile(dbId string, email string) error {
 
-  err := os.RemoveAll("./storage/db_"+dbId)
+  err := DeleteAccount(email)
+  if err != nil {
+    return fmt.Errorf("Error occurred during deleting account")
+  }
+
+  err = os.RemoveAll("./storage/db_"+dbId)
   if err != nil {
     return fmt.Errorf("Error occurred during deleting directory")
   }

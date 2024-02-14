@@ -23,7 +23,7 @@ func checkRequestSize(c *gin.Context) {
 
 func CORSMiddleware() gin.HandlerFunc {
   return func(c *gin.Context) {
-    c.Writer.Header().Set("Access-Control-Allow-Origin", "*") // Or use a specific origin
+    c.Writer.Header().Set("Access-Control-Allow-Origin", os.Getenv("ALLOWED_ORIGIN"))
     c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
     c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
     c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -47,7 +47,6 @@ func main() {
   router := gin.Default()
 
   router.SetTrustedProxies(nil)
-
   router.Use(CORSMiddleware())
 
   apiGroup := router.Group("/api")
@@ -64,7 +63,7 @@ func main() {
         c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
         return
       }
-      c.JSON(http.StatusOK, gin.H{"dbs": dbs})
+      c.JSON(http.StatusOK, dbs) 
       return
     }
     c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -75,14 +74,25 @@ func main() {
       c.JSON(http.StatusUnauthorized, gin.H{"error": "Unable to create database, Please go to the BsonDB website the create one."})
       return
     }
-
-    dbId, err := db.CreateBsonFile()
+    var req map[string]string
+    if err := c.ShouldBindJSON(&req); err != nil {
+      c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+      return
+    }
+    if _, ok := req["email"]; !ok {
+      c.JSON(http.StatusBadRequest, gin.H{"error": "Email is required"})
+      return
+    }
+    dbId, err := db.CreateBsonFile(req["email"])
     if err != nil {
       c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
       return
     }
     c.JSON(http.StatusOK, gin.H{"id": dbId})
   })
+
+
+
 
   // Read a entire database
   apiGroup.GET("/readdb/:id", func(c *gin.Context) {
@@ -222,7 +232,7 @@ func main() {
   })
 
   // delete entire database
-  apiGroup.DELETE("/deletedb/:id", func(c *gin.Context) {
+  apiGroup.POST("/deletedb/:id", func(c *gin.Context) {
     dbId := c.Param("id")
 
     auhtorization := c.GetHeader("Authorization")
@@ -231,7 +241,13 @@ func main() {
       return
     }
 
-    err := db.DeleteBsonFile(dbId)
+    var email map[string]string
+    if err := c.ShouldBindJSON(&email); err != nil {
+      c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+      return
+    }
+
+    err := db.DeleteBsonFile(dbId, email["email"])
     if err != nil {
       c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
       return

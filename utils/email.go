@@ -17,7 +17,7 @@ func SendEmail(email string, code string) EmailResponse {
 
 	payload := bytes.NewBufferString(fmt.Sprintf(`{
 		"sendto": "%s",
-		"name": "Custom Name Here",
+		"name": "BsonDB",
 		"replyTo": "%s",
 		"ishtml": false,
 		"title": "BsonDB Verification Code",

@@ -96,25 +96,30 @@ func DeleteAccount(email string) error {
   if err != nil {
     return err
   }
+
   err = bson.Unmarshal(fileData, &accounts)
   if err != nil {
     return fmt.Errorf("Error occurred during unmarshaling: %v", err)
   }
+
+  // delete all occurances of the account
+  var newAccounts Accounts
   for i, account := range accounts.AccountData {
-    if account.Email == email {
-      accounts.AccountData = append(accounts.AccountData[:i], accounts.AccountData[i+1:]...)
-      doc := bson.M{"accounts": accounts.AccountData}
-      data, err := bson.Marshal(doc)
-      if err != nil {
-        return err
-      }
-      err = os.WriteFile("./accounts/accounts.bson", data,  0644)
-      if err != nil {
-        return fmt.Errorf("Error occurred during writing to file: %v", err) 
-      }
-      return nil
+    if account.Email != email {
+      newAccounts.AccountData = append(newAccounts.AccountData, accounts.AccountData[i])
     }
   }
-  return fmt.Errorf("Account not found")
+
+  doc := bson.M{"accounts": newAccounts.AccountData}
+  data, err := bson.Marshal(doc)
+  if err != nil {
+    return err
+  }
+  err = os.WriteFile("./accounts/accounts.bson", data,  0644)
+  if err != nil {
+    return fmt.Errorf("Error occurred during writing to file: %v", err) 
+  }
+  return nil
+
 }
 

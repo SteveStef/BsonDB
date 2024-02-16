@@ -26,7 +26,7 @@ func GetAllDBs() (Accounts, error) {
   for i, account := range accounts.AccountData {
     size, err := calculateDirSize("./storage/db_"+account.Database)
     if err != nil {
-      return Accounts{}, fmt.Errorf("Error occurred during calculating size: %v", err)
+      continue
     }
     size += 4096
     accounts.AccountData[i].Size = fmt.Sprintf("%d", size)

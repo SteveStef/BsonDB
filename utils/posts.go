@@ -8,7 +8,6 @@ import (
 )
 
 func AccountMiddleware(email string, code string) (string, error) {
-  // check if account exists
   dbId, err := CheckIfAccountExists(email)
   if err != nil {
     return "", fmt.Errorf("Error occurred during checking if account exists: %v", err)
@@ -16,12 +15,17 @@ func AccountMiddleware(email string, code string) (string, error) {
   if dbId != "" {
     return dbId, nil
   }
-  emailRes := SendEmail(email, code)
-  if emailRes.Error {
-    return "", fmt.Errorf("Only 10 people can make a database per day: %v", emailRes.Message)
-  } else {
-    fmt.Printf("Email sent to %s\n", emailRes.Message)
-  }
+
+  // I dont want to wait for this function to finish
+  go func() {
+    emailRes := SendEmail(email, code)
+    if emailRes.Error {
+      fmt.Printf("Error sending email: %v\n", emailRes.Message)
+    } else {
+      fmt.Printf("Email sent to %s\n", emailRes.Message)
+    }
+  }()
+
   return "", nil
 }
 

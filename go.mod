@@ -1,4 +1,4 @@
-module MinDB
+module BsonDB-API 
 
 go 1.18
 

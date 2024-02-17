@@ -14,10 +14,14 @@ func AddTableToDb(directory string, table Table) error {
   if err != nil {
     return fmt.Errorf("Error occurred during marshaling")
   }
-  // make sure that the table does not already exist
-  _, err = os.ReadFile("./storage/db_"+directory+"/"+table.Name+".bson")
+
+  // check if the file exists, if it does, remove it
+  _, err = os.Stat("./storage/db_"+directory+"/"+table.Name+".bson")
   if err == nil {
-    return fmt.Errorf("Table already exists")
+    err = os.Remove("./storage/db_"+directory+"/"+table.Name+".bson")
+    if err != nil {
+      return fmt.Errorf("Error occurred during removing file")
+    }
   }
 
   err = os.WriteFile("./storage/db_"+directory+"/"+table.Name+".bson", bsonData, 0644)

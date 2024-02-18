@@ -6,6 +6,8 @@ import (
   "go.mongodb.org/mongo-driver/bson"
   "github.com/google/uuid"
   "sync"
+  "io"
+  "syscall"
 )
 
 func AccountMiddleware(email string, code string) (string, error) {
@@ -50,14 +52,21 @@ func InitAccountsFile() error {
 
 
 func CheckIfAccountExists(email string) (string, error) {
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+
   var accounts Accounts
-  fileData, err := os.ReadFile("./accounts/accounts.bson")
+  file, err := os.Open("./accounts/accounts.bson")
   if err != nil {
     return "", err
   }
-  err = bson.Unmarshal(fileData, &accounts)
+  defer file.Close()
+
+  //fileData, err := io.Read("./accounts/accounts.bson")
+  bAccounts, err := io.ReadAll(file)
+  if err != nil {
+    return "", fmt.Errorf("Error occurred during reading file: %v", err)
+  }
+
+  err = bson.Unmarshal(bAccounts, &accounts)
   if err != nil {
     return "", fmt.Errorf("Error occurred during unmarshaling: %v", err)
   }
@@ -87,44 +96,53 @@ func CreateBsonFile(email string) (string, error) {
 
 
 func AddAccount(email string, dbId string) error {
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
   var accounts Accounts
-  fileData, err := os.ReadFile("./accounts/accounts.bson")
-  if err != nil {
-    return err
-  }
-  err = bson.Unmarshal(fileData, &accounts)
-  if err != nil {
-    return fmt.Errorf("Error occurred during unmarshaling: %v", err)
-  }
+  file, err := os.OpenFile("./accounts/accounts.bson", os.O_RDWR, 0644)
+  if err != nil { return err }
+  defer file.Close()
+
+	err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
+  if err != nil { return fmt.Errorf("Error locking file:", err) }
+	defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+
+  bAccounts, err := io.ReadAll(file)
+  if err != nil { return fmt.Errorf("Error occurred during reading file: %v", err) }
+
+  err = bson.Unmarshal(bAccounts, &accounts)
+  if err != nil { return fmt.Errorf("Error occurred during unmarshaling: %v", err) }
 
   accounts.AccountData = append(accounts.AccountData, Account{Email: email, Database: dbId})
   doc := bson.M{"accounts": accounts.AccountData}
+
   data, err := bson.Marshal(doc)
-  if err != nil {
-    return err
-  }
-  err = os.WriteFile("./accounts/accounts.bson", data,  0644)
-  if err != nil {
-    return fmt.Errorf("Error occurred during writing to file: %v", err) 
-  }
+  if err != nil { return err }
+
+  _, err = file.Seek(0, io.SeekStart)
+  if err != nil { return fmt.Errorf("Error occurred during seeking: %v", err) }
+
+  err = file.Truncate(0)
+  if err != nil { return fmt.Errorf("Error occurred during truncating: %v", err) }
+
+  _, err = file.Write(data)
+  if err != nil { return fmt.Errorf("Error occurred during writing to file: %v", err) }
+
   return nil
 }
 
 func DeleteAccount(email string) error {
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
   var accounts Accounts
-  fileData, err := os.ReadFile("./accounts/accounts.bson")
-  if err != nil {
-    return err
-  }
+  file, err := os.OpenFile("./accounts/accounts.bson", os.O_RDWR, 0644)
+  if err != nil { return err }
+  defer file.Close()
 
-  err = bson.Unmarshal(fileData, &accounts)
-  if err != nil {
-    return fmt.Errorf("Error occurred during unmarshaling: %v", err)
-  }
+  err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
+  if err != nil { return fmt.Errorf("Error locking file:", err) }
+  defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+
+  bAccounts, err := io.ReadAll(file)
+
+  err = bson.Unmarshal(bAccounts, &accounts)
+  if err != nil { return fmt.Errorf("Error occurred during unmarshaling: %v", err) }
 
   // delete all occurances of the account
   var newAccounts Accounts
@@ -136,15 +154,18 @@ func DeleteAccount(email string) error {
 
   doc := bson.M{"accounts": newAccounts.AccountData}
   data, err := bson.Marshal(doc)
-  if err != nil {
-    return err
-  }
-  err = os.WriteFile("./accounts/accounts.bson", data,  0644)
-  if err != nil {
-    return fmt.Errorf("Error occurred during writing to file: %v", err) 
-  }
-  return nil
+  if err != nil { return err }
 
+  _, err = file.Seek(0, io.SeekStart)
+  if err != nil { return fmt.Errorf("Error occurred during seeking: %v", err) }
+
+  err = file.Truncate(0)
+  if err != nil { return fmt.Errorf("Error occurred during truncating: %v", err) }
+
+  _, err = file.Write(data)
+  if err != nil { return fmt.Errorf("Error occurred during writing to file: %v", err) }
+
+  return nil
 }
 
 func ValidateTable(table *Table) error {
@@ -205,8 +226,6 @@ func MigrateTables(dbId string, tables []Table) error {
 }
 
 func DeleteTablesNotInList(dbId string, tblNames []string) error {
-  fileMutex.Lock()
-  defer fileMutex.Unlock()
 
   dirPath := "./storage/db_" + dbId
   files, err := os.ReadDir(dirPath)
@@ -236,13 +255,9 @@ func DeleteTablesNotInList(dbId string, tblNames []string) error {
 }
 
 func AddTableToDb(directory string, table Table) error {
-  fileMutex.Lock()
-  defer fileMutex.Unlock()
 
   bsonData, err := bson.Marshal(table)
-  if err != nil {
-    return fmt.Errorf("Error occurred during marshaling: %v", err)
-  }
+  if err != nil { return fmt.Errorf("Error occurred during marshaling: %v", err) }
 
   dirPath := "./storage/db_" + directory
   filePath := dirPath + "/" + table.Name + ".bson"

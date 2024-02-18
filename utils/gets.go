@@ -3,26 +3,26 @@ import (
   "fmt"
   "os"
   "sync"
+  "io"
   "go.mongodb.org/mongo-driver/bson"
 )
 
 var fileMutex sync.Mutex
 
 func GetAllDBs() (Accounts, error) {
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
-  // read all the accounts and put them in Accounts varaible
   var accounts Accounts
-  fileData, err := os.ReadFile("./accounts/accounts.bson")
+  f, err := os.Open("./accounts/accounts.bson")
   if err != nil {
     return Accounts{}, err
   }
+  defer f.Close()
+
+  fileData, err := io.ReadAll(f)
   err = bson.Unmarshal(fileData, &accounts)
   if err != nil {
     return Accounts{}, fmt.Errorf("Error occurred during unmarshaling: %v", err)
   }
   
-  // loop through all the accounts and get the size of the database
   for i, account := range accounts.AccountData {
     size, err := calculateDirSize("./storage/db_"+account.Database)
     if err != nil {
@@ -61,8 +61,6 @@ func calculateDirSize(dirpath string) (int64, error) {
 
 // reads th entire database
 func ReadBsonFile(directory string) (Model, error, int64) {
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
 
   model := Model{}
   tables := []Table{}
@@ -76,13 +74,21 @@ func ReadBsonFile(directory string) (Model, error, int64) {
     if file.IsDir() {
       return model, fmt.Errorf("Directory found instead of file"), 0
     }
-    fileData, err := os.ReadFile("./storage/db_"+directory+"/"+file.Name())
-    size += int64(len(fileData))
+
+    file, err := os.Open("./storage/db_"+directory+"/"+file.Name())
     if err != nil {
       return model, err, 0
     }
-    table := Table{}
-    err = bson.Unmarshal(fileData, &table)
+    defer file.Close()
+
+    bTable, err := io.ReadAll(file)
+    if err != nil {
+      return model, err, 0
+    }
+
+    size += int64(len(bTable))
+    var table Table
+    err = bson.Unmarshal(bTable, &table)
     if err != nil {
       return model, err, 0
     }
@@ -93,31 +99,43 @@ func ReadBsonFile(directory string) (Model, error, int64) {
 }
 
 func GetTable(directoryId string, table string) (Table, error) {
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
-  tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", directoryId, table)
-  fileData, err := os.ReadFile(tableFile)
+
+  filePath := fmt.Sprintf("./storage/db_%s/%s.bson", directoryId, table)
+  file, err := os.Open(filePath)
   if err != nil {
     return Table{}, fmt.Errorf("Table not found") 
   }
+  defer file.Close()
+
+  bTable, err := io.ReadAll(file)
+  if err != nil {
+    return Table{}, fmt.Errorf("Error occurred during reading")
+  }
+
   var tableData Table
-  err = bson.Unmarshal(fileData, &tableData)
+  err = bson.Unmarshal(bTable, &tableData)
   if err != nil {
     return Table{}, fmt.Errorf("Error occurred during unmarshaling")
   }
+
   return tableData, nil
 }
 
 func GetEntryFromTable(directoryId string, table string, entryId string) (map[string]interface{}, error) {
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
-  tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", directoryId, table)
-  fileData, err := os.ReadFile(tableFile)
+  filePath := fmt.Sprintf("./storage/db_%s/%s.bson", directoryId, table)
+  file, err := os.Open(filePath)
   if err != nil {
     return map[string]interface{}{}, fmt.Errorf("Table not found")
   }
+  defer file.Close()
+
+  bTable, err := io.ReadAll(file)
+  if err != nil {
+    return map[string]interface{}{}, fmt.Errorf("Error occurred during reading")
+  }
+
   var tableData Table
-  err = bson.Unmarshal(fileData, &tableData)
+  err = bson.Unmarshal(bTable, &tableData)
   if err != nil {
     return map[string]interface{}{}, fmt.Errorf("Error occurred during unmarshaling")
   }
@@ -130,15 +148,21 @@ func GetEntryFromTable(directoryId string, table string, entryId string) (map[st
 }
 
 func GetFieldFromEntry(dbId string, table string, entryId string, field string) (interface{}, error) {
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
-  tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
-  fileData, err := os.ReadFile(tableFile)
+
+  path := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
+  file, err := os.Open(path)
   if err != nil {
     return nil, fmt.Errorf("Table not found")
   }
+  defer file.Close()
+
+  bTable, err := io.ReadAll(file)
+  if err != nil {
+    return nil, fmt.Errorf("Error occurred during reading")
+  }
+
   var tableData Table
-  err = bson.Unmarshal(fileData, &tableData)
+  err = bson.Unmarshal(bTable, &tableData)
   if err != nil {
     return nil, fmt.Errorf("Error occurred during unmarshaling")
   }
@@ -151,20 +175,25 @@ func GetFieldFromEntry(dbId string, table string, entryId string, field string) 
 }
 
 func GetEntriesByFieldValue(dbId string, table string, field string, value string) ([]map[string]interface{}, error) {
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
-  tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
-  fileData, err := os.ReadFile(tableFile)
+
+  path := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
+  file, err := os.Open(path)
   if err != nil {
     return []map[string]interface{}{}, fmt.Errorf("Table not found")
   }
+  defer file.Close()
+
+
+  bTable, err := io.ReadAll(file)
+  if err != nil {
+    return []map[string]interface{}{}, fmt.Errorf("Error occurred during reading")
+  }
+
   var tableData Table
-  err = bson.Unmarshal(fileData, &tableData)
+  err = bson.Unmarshal(bTable, &tableData)
   if err != nil {
     return []map[string]interface{}{}, fmt.Errorf("Error occurred during unmarshaling")
   }
-
-  fmt.Println(value, field, tableData.Entries)
 
   entries := []map[string]interface{}{}
   for _, entry := range tableData.Entries {
@@ -177,6 +206,4 @@ func GetEntriesByFieldValue(dbId string, table string, field string, value strin
   }
   return entries, nil
 }
-
-
 

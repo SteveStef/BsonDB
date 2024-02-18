@@ -100,25 +100,6 @@ func AddEntry(c *gin.Context) {
   c.JSON(http.StatusOK, gin.H{"message": "Entry added"})
 }
 
-// Add a table to a database
-func AddTable(c *gin.Context) {
-  dbId := c.Param("id")
-  var table db.Table
-
-  if err := c.ShouldBindJSON(&table); err != nil {
-    fmt.Println("Binding error")
-    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-    return
-  }
-
-  err := db.AddTableToDb(dbId, table)
-  if err != nil {
-    c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-    return
-  }
-  c.JSON(http.StatusOK, gin.H{"message": "Table added"})
-}
-
 func DeleteDatabase(c *gin.Context) {
   dbId := c.Param("id")
 
@@ -148,5 +129,22 @@ func DeleteDatabase(c *gin.Context) {
   }
 
   c.JSON(http.StatusOK, gin.H{"message": "Database deleted"})
+}
+
+func MigrateTables(c *gin.Context) {
+  dbId := c.Param("id")
+  var tables []db.Table
+
+  if err := c.ShouldBindJSON(&tables); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "The JSON table is not valid"})
+    return
+  }
+
+  err := db.MigrateTables(dbId, tables)
+  if err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
+  c.JSON(http.StatusOK, gin.H{"message": "Tables migrated"})
 }
 

@@ -7,29 +7,6 @@ import (
 )
 
 
-func AddTableToDb(directory string, table Table) error {
-  fileMutex.Lock() 
-  defer fileMutex.Unlock() 
-  bsonData, err := bson.Marshal(table)
-  if err != nil {
-    return fmt.Errorf("Error occurred during marshaling")
-  }
-
-  // check if the file exists, if it does, remove it
-  _, err = os.Stat("./storage/db_"+directory+"/"+table.Name+".bson")
-  if err == nil {
-    err = os.Remove("./storage/db_"+directory+"/"+table.Name+".bson")
-    if err != nil {
-      return fmt.Errorf("Error occurred during removing file")
-    }
-  }
-
-  err = os.WriteFile("./storage/db_"+directory+"/"+table.Name+".bson", bsonData, 0644)
-  if err != nil {
-    return fmt.Errorf("Error occurred during writing to file")
-  }
-  return nil
-}
 
 func AddEntryToTable(dbId string, table string, entryId string, entry map[string]interface{}) error {
   tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
@@ -51,6 +28,15 @@ func AddEntryToTable(dbId string, table string, entryId string, entry map[string
   for _, requiredField := range tableData.Requires {
     if _, ok := entry[requiredField]; !ok {
       return fmt.Errorf("Entry does not have required field: " + requiredField)
+    }
+  }
+
+  for key, value := range entry {
+    if _, ok := tableData.EntryTemplate[key]; !ok {
+      return fmt.Errorf("Field not found in entry template")
+    }
+    if !CheckType(value, tableData.EntryTemplate[key]) {
+      return fmt.Errorf("Field type does not match entry template")
     }
   }
 
@@ -89,6 +75,14 @@ func UpdateEntryInTable(dbId string, table string, entryId string, entry map[str
     }
   }
 
+  for key, value := range entry {
+    if _, ok := tableData.EntryTemplate[key]; !ok {
+      return fmt.Errorf("Field not found in entry template")
+    }
+    if !CheckType(value, tableData.EntryTemplate[key]) {
+      return fmt.Errorf("Field type does not match entry template")
+    }
+  }
 
   tableData.Entries[entryId] = entry
   bsonData, err := bson.Marshal(tableData)
@@ -121,6 +115,9 @@ func UpdateFieldInTable(dbId string, table string, entryId string, obj map[strin
   // if the entry has the field, update it
   for key, value := range obj {
     if _, ok := tableData.Entries[entryId][key]; ok {
+      if !CheckType(value, tableData.EntryTemplate[key]) {
+        return fmt.Errorf("Field type does not match entry template")
+      }
       tableData.Entries[entryId][key] = value
     } else {
       return fmt.Errorf("Field not found")
@@ -136,4 +133,20 @@ func UpdateFieldInTable(dbId string, table string, entryId string, obj map[strin
     return fmt.Errorf("Error occurred during writing to file")
   }
   return nil
+}
+
+func CheckType(value interface{}, template interface{}) bool {
+  if fmt.Sprintf("%T", value) == "map[string]interface {}" {
+    return true
+  }
+  if fmt.Sprintf("%T", value) == "float64" && fmt.Sprintf("%T", template) == "int" {
+    return true
+  }
+  if fmt.Sprintf("%T", value) == "int" && fmt.Sprintf("%T", template) == "float64" {
+    return true
+  }
+  if fmt.Sprintf("%T", value) != fmt.Sprintf("%T", template) {
+    return false
+  }
+  return true
 }

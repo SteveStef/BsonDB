@@ -5,6 +5,7 @@ import (
   "os"
   "go.mongodb.org/mongo-driver/bson"
   "github.com/google/uuid"
+  "sync"
 )
 
 func AccountMiddleware(email string, code string) (string, error) {
@@ -127,3 +128,127 @@ func DeleteAccount(email string) error {
 
 }
 
+func ValidateTable(table *Table) error {
+  if table.Identifier == "" {
+    return fmt.Errorf("Table identifier is required")
+  }
+  if table.EntryTemplate == nil {
+    return fmt.Errorf("Table entry template is required")
+  }
+
+  // add strings in the requires field must be in the EntryTemplate
+  for _, requiredField := range table.Requires {
+    if _, ok := table.EntryTemplate[requiredField]; !ok {
+      return fmt.Errorf("Required field not in entry template: " + requiredField)
+    }
+  }
+
+  return nil;
+}
+
+
+
+
+
+// ================== TABLE MIGRATION ==================
+func MigrateTables(dbId string, tables []Table) error {
+  var tblNames []string
+  var errs []error
+
+  // Use a wait group to wait for all goroutines to finish
+  var wg sync.WaitGroup
+  wg.Add(len(tables))
+
+  for _, table := range tables {
+    err := ValidateTable(&table)
+    if err != nil {
+      return fmt.Errorf("Error occurred during validating table: %v", err)
+    }
+
+    tblNames = append(tblNames, table.Name)
+    go func(table Table) {
+      defer wg.Done()
+      if err := AddTableToDb(dbId, table); err != nil {
+        errs = append(errs, fmt.Errorf("Error occurred during adding table to db: %v", err))
+      }
+    }(table)
+  }
+
+  // Wait for all goroutines to finish
+  wg.Wait()
+
+  // Delete tables not in the list after all tables have been processed
+  if err := DeleteTablesNotInList(dbId, tblNames); err != nil {
+    errs = append(errs, fmt.Errorf("Error occurred during deleting tables not in list: %v", err))
+  }
+
+  if len(errs) >  0 {
+    return fmt.Errorf("%v", errs)
+  }
+  return nil
+}
+
+func DeleteTablesNotInList(dbId string, tblNames []string) error {
+  fileMutex.Lock()
+  defer fileMutex.Unlock()
+
+  dirPath := "./storage/db_" + dbId
+  files, err := os.ReadDir(dirPath)
+  if err != nil {
+    return fmt.Errorf("Error occurred during reading directory: %v", err)
+  }
+
+  for _, file := range files {
+    if file.IsDir() {
+      continue
+    }
+    var found bool
+    for _, tblName := range tblNames {
+      if file.Name() == tblName+".bson" {
+        found = true
+        break
+      }
+    }
+    if !found {
+      err = os.Remove(dirPath + "/" + file.Name())
+      if err != nil {
+        return fmt.Errorf("Error occurred during deleting file: %v", err)
+      }
+    }
+  }
+  return nil
+}
+
+func AddTableToDb(directory string, table Table) error {
+  fileMutex.Lock()
+  defer fileMutex.Unlock()
+
+  bsonData, err := bson.Marshal(table)
+  if err != nil {
+    return fmt.Errorf("Error occurred during marshaling: %v", err)
+  }
+
+  dirPath := "./storage/db_" + directory
+  filePath := dirPath + "/" + table.Name + ".bson"
+
+  if _, err := os.Stat(filePath); err == nil {
+    err = os.WriteFile(filePath, bsonData,  0644)
+    if err != nil {
+      return fmt.Errorf("Error occurred during writing to file: %v", err)
+    }
+    return nil
+  } else if os.IsNotExist(err) {
+    file, err := os.Create(filePath)
+    if err != nil {
+      return fmt.Errorf("Error occurred during creating file: %v", err)
+    }
+    defer file.Close()
+    _, err = file.Write(bsonData)
+    if err != nil {
+      return fmt.Errorf("Error occurred during writing to file: %v", err)
+    }
+    return nil
+  }
+
+  return nil
+}

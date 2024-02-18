@@ -80,7 +80,6 @@ func GetEntriesByFieldValue(c *gin.Context) {
   value := c.Param("value")
 
   fmt.Println(dbId, table, field, value)
-
   entryData, err := db.GetEntriesByFieldValue(dbId, table, field, value)
   if err != nil {
     c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

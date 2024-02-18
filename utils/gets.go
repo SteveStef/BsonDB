@@ -164,6 +164,8 @@ func GetEntriesByFieldValue(dbId string, table string, field string, value strin
     return []map[string]interface{}{}, fmt.Errorf("Error occurred during unmarshaling")
   }
 
+  fmt.Println(value, field, tableData.Entries)
+
   entries := []map[string]interface{}{}
   for _, entry := range tableData.Entries {
     if val, ok := entry[field]; ok {

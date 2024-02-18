@@ -53,12 +53,14 @@ func main() {
   apiGroup.GET("field/:id/:table/:entry/:field", route.GetField)
   apiGroup.GET("entries/:id/:table/:field/:value", route.GetEntriesByFieldValue)
 
-  // returns { email: false, id sdsdfsdf2}, { email: true, id: ""}
   apiGroup.POST("/check-account", route.AccountMiddleware)
   apiGroup.POST("/createdb", route.Createdb)
   apiGroup.POST("/deletedb/:id", route.DeleteDatabase)
   apiGroup.POST("/add-entry/:id/:table/:entryId", checkRequestSize, route.AddEntry)
-  apiGroup.POST("/add-table/:id", checkRequestSize, route.AddTable)
+
+  // apiGroup.POST("/add-table/:id", checkRequestSize, route.AddTable)
+
+  apiGroup.POST("/migrate-tables/:id", checkRequestSize, route.MigrateTables) // working on this
 
   apiGroup.PUT("/update-field/:id/:table/:entryId", checkRequestSize, route.UpdateField)
   apiGroup.PUT("/update-entry/:id/:table/:entryId", checkRequestSize, route.UpdateEntry)

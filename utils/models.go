@@ -17,7 +17,9 @@ type Account struct {
 
 type Table struct {
   Name string `bson:"name"`
-  Requires []string `bson:"keys"`
+  Requires []string `bson:"requires"`
+  Identifier string `bson:"identifier"`
+  EntryTemplate map[string]interface{} `bson:"entryTemplate"`
   Entries map[string]map[string]interface{}`bson:"entries"`
 }
 

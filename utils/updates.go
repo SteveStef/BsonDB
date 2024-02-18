@@ -9,6 +9,9 @@ import (
 
 
 func AddEntryToTable(dbId string, table string, entryId string, entry map[string]interface{}) error {
+  fileMutex.Lock() // Lock the mutex before accessing the file
+  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+
   tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
   fileData, err := os.ReadFile(tableFile)
   if err != nil {
@@ -53,6 +56,10 @@ func AddEntryToTable(dbId string, table string, entryId string, entry map[string
 }
 
 func UpdateEntryInTable(dbId string, table string, entryId string, entry map[string]interface{}) error {
+
+  fileMutex.Lock() // Lock the mutex before accessing the file
+  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+
   tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
   fileData, err := os.ReadFile(tableFile)
   if err != nil {
@@ -97,6 +104,10 @@ func UpdateEntryInTable(dbId string, table string, entryId string, entry map[str
 }
 
 func UpdateFieldInTable(dbId string, table string, entryId string, obj map[string]interface{}) error {
+
+  fileMutex.Lock() // Lock the mutex before accessing the file
+  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+
   tableFile := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
   fileData, err := os.ReadFile(tableFile)
   if err != nil {

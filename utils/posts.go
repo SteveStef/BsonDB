@@ -30,6 +30,24 @@ func AccountMiddleware(email string, code string) (string, error) {
   return "", nil
 }
 
+func InitAccountsFile() error {
+  fileMutex.Lock() // Lock the mutex before accessing the file
+  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
+  var accounts Accounts
+  accounts.AccountData = []Account{}
+  doc := bson.M{"accounts": accounts.AccountData}
+  data, err := bson.Marshal(doc)
+  if err != nil {
+    return err
+  }
+  err = os.WriteFile("./accounts/accounts.bson", data,  0644)
+  if err != nil {
+    return fmt.Errorf("Error occurred during writing to file: %v", err) 
+  }
+  return nil
+}
+
+
 func CheckIfAccountExists(email string) (string, error) {
   fileMutex.Lock() // Lock the mutex before accessing the file
   defer fileMutex.Unlock() // Ensure the mutex is always unlocked

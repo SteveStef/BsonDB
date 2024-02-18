@@ -38,7 +38,7 @@ func AddEntryToTable(dbId string, table string, entryId string, entry map[string
     }
     t := DetermindType(value)
     if t != tableData.EntryTemplate[key] {
-      return fmt.Errorf("Field type does not match entry template %s %s", t, tableData.EntryTemplate[key])
+      return fmt.Errorf("Unexpected type on field %s, expected %s, got %s", key, tableData.EntryTemplate[key], t)
     }
   }
 
@@ -87,7 +87,7 @@ func UpdateEntryInTable(dbId string, table string, entryId string, entry map[str
     }
     t := DetermindType(value)
     if t != tableData.EntryTemplate[key] {
-      return fmt.Errorf("Field type does not match entry template %s %s", t, tableData.EntryTemplate[key])
+      return fmt.Errorf("Unexpected type on field %s, expected %s, got %s", key, tableData.EntryTemplate[key], t)
     }
   }
 
@@ -128,7 +128,7 @@ func UpdateFieldInTable(dbId string, table string, entryId string, obj map[strin
     if _, ok := tableData.Entries[entryId][key]; ok {
       t := DetermindType(value)
       if t != tableData.EntryTemplate[key] {
-        return fmt.Errorf("Field type does not match entry template %s %s", t, tableData.EntryTemplate[key])
+        return fmt.Errorf("Unexpected type on field %s, expected %s, got %s", key, tableData.EntryTemplate[key], t)
       }
       tableData.Entries[entryId][key] = value
     } else {

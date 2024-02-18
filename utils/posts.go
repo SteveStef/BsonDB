@@ -169,7 +169,7 @@ func MigrateTables(dbId string, tables []Table) error {
     go func(table Table) {
       defer wg.Done()
       if err := AddTableToDb(dbId, table); err != nil {
-        errs = append(errs, fmt.Errorf("Error occurred during adding table to db: %v", err))
+        errs = append(errs, fmt.Errorf("Error occurred during adding table, make sure your database ID is valid"))
       }
     }(table)
   }
@@ -179,11 +179,11 @@ func MigrateTables(dbId string, tables []Table) error {
 
   // Delete tables not in the list after all tables have been processed
   if err := DeleteTablesNotInList(dbId, tblNames); err != nil {
-    errs = append(errs, fmt.Errorf("Error occurred during deleting tables not in list: %v", err))
+    errs = append(errs, fmt.Errorf("Error occurred during removing unwanted tables"))
   }
 
   if len(errs) >  0 {
-    return fmt.Errorf("%v", errs)
+    return errs[0]
   }
   return nil
 }

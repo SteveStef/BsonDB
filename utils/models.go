@@ -1,4 +1,7 @@
 package db
+import (
+  "reflect"
+)
 
 type EmailResponse struct {
 	Error   bool   `json:"error"`
@@ -15,16 +18,16 @@ type Account struct {
   Size string
 }
 
-type table struct {
-  name string `bson:"name"`
-  requires []string `bson:"requires"`
-  identifier string `bson:"identifier"`
-  entrytemplate map[string]string `bson:"entrytemplate"`
-  entries map[string]map[string]interface{}`bson:"entries"`
+type Table struct {
+  Name string `bson:"name"`
+  Requires []string `bson:"requires"`
+  Identifier string `bson:"identifier"`
+  EntryTemplate map[string]string `bson:"entrytemplate"`
+  Entries map[string]map[string]interface{}`bson:"entries"`
 }
 
-type model struct {
-  tables []table `bson:"tables"`
+type Model struct {
+  Tables []Table `bson:"tables"`
 }
 
 type AdminData struct {
@@ -34,12 +37,12 @@ type AdminData struct {
 
 func DetermindType(i interface{}) string {
 	var typestr string
-	switch reflect.typeof(i).kind() {
-	case reflect.string:
+	switch reflect.TypeOf(i).Kind() {
+	case reflect.String:
 		typestr = "string"
-	case reflect.int, reflect.float64:
+	case reflect.Int, reflect.Float64:
 		typestr = "number"
-	case reflect.bool:
+	case reflect.Bool:
 		typestr = "boolean"
 	default:
 		typestr = "object"

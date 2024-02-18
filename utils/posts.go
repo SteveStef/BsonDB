@@ -30,6 +30,7 @@ func AccountMiddleware(email string, code string) (string, error) {
   return "", nil
 }
 
+// run this function to if accounts.bson gets deleted 
 func InitAccountsFile() error {
   fileMutex.Lock() // Lock the mutex before accessing the file
   defer fileMutex.Unlock() // Ensure the mutex is always unlocked
@@ -163,9 +164,6 @@ func ValidateTable(table *Table) error {
 
   return nil;
 }
-
-
-
 
 
 // ================== TABLE MIGRATION ==================

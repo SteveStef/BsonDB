@@ -15,19 +15,34 @@ type Account struct {
   Size string
 }
 
-type Table struct {
-  Name string `bson:"name"`
-  Requires []string `bson:"requires"`
-  Identifier string `bson:"identifier"`
-  EntryTemplate map[string]interface{} `bson:"entryTemplate"`
-  Entries map[string]map[string]interface{}`bson:"entries"`
+type table struct {
+  name string `bson:"name"`
+  requires []string `bson:"requires"`
+  identifier string `bson:"identifier"`
+  entrytemplate map[string]string `bson:"entrytemplate"`
+  entries map[string]map[string]interface{}`bson:"entries"`
 }
 
-type Model struct {
-  Tables []Table `bson:"tables"`
+type model struct {
+  tables []table `bson:"tables"`
 }
 
 type AdminData struct {
   UserAccounts []Account
   Size string
+}
+
+func DetermindType(i interface{}) string {
+	var typestr string
+	switch reflect.typeof(i).kind() {
+	case reflect.string:
+		typestr = "string"
+	case reflect.int, reflect.float64:
+		typestr = "number"
+	case reflect.bool:
+		typestr = "boolean"
+	default:
+		typestr = "object"
+	}
+	return typestr
 }

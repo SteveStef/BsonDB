@@ -6,8 +6,6 @@ import (
   "go.mongodb.org/mongo-driver/bson"
 )
 
-
-
 func AddEntryToTable(dbId string, table string, entryId string, entry map[string]interface{}) error {
   fileMutex.Lock() // Lock the mutex before accessing the file
   defer fileMutex.Unlock() // Ensure the mutex is always unlocked
@@ -38,8 +36,9 @@ func AddEntryToTable(dbId string, table string, entryId string, entry map[string
     if _, ok := tableData.EntryTemplate[key]; !ok {
       return fmt.Errorf("Field not found in entry template")
     }
-    if !CheckType(value, tableData.EntryTemplate[key]) {
-      return fmt.Errorf("Field type does not match entry template")
+    t := DetermindType(value)
+    if t != tableData.EntryTemplate[key] {
+      return fmt.Errorf("Field type does not match entry template %s %s", t, tableData.EntryTemplate[key])
     }
   }
 
@@ -86,8 +85,9 @@ func UpdateEntryInTable(dbId string, table string, entryId string, entry map[str
     if _, ok := tableData.EntryTemplate[key]; !ok {
       return fmt.Errorf("Field not found in entry template")
     }
-    if !CheckType(value, tableData.EntryTemplate[key]) {
-      return fmt.Errorf("Field type does not match entry template")
+    t := DetermindType(value)
+    if t != tableData.EntryTemplate[key] {
+      return fmt.Errorf("Field type does not match entry template %s %s", t, tableData.EntryTemplate[key])
     }
   }
 
@@ -126,8 +126,9 @@ func UpdateFieldInTable(dbId string, table string, entryId string, obj map[strin
   // if the entry has the field, update it
   for key, value := range obj {
     if _, ok := tableData.Entries[entryId][key]; ok {
-      if !CheckType(value, tableData.EntryTemplate[key]) {
-        return fmt.Errorf("Field type does not match entry template")
+      t := DetermindType(value)
+      if t != tableData.EntryTemplate[key] {
+        return fmt.Errorf("Field type does not match entry template %s %s", t, tableData.EntryTemplate[key])
       }
       tableData.Entries[entryId][key] = value
     } else {
@@ -146,18 +147,3 @@ func UpdateFieldInTable(dbId string, table string, entryId string, obj map[strin
   return nil
 }
 
-func CheckType(value interface{}, template interface{}) bool {
-  if fmt.Sprintf("%T", value) == "map[string]interface {}" {
-    return true
-  }
-  if fmt.Sprintf("%T", value) == "float64" && fmt.Sprintf("%T", template) == "int" {
-    return true
-  }
-  if fmt.Sprintf("%T", value) == "int" && fmt.Sprintf("%T", template) == "float64" {
-    return true
-  }
-  if fmt.Sprintf("%T", value) != fmt.Sprintf("%T", template) {
-    return false
-  }
-  return true
-}

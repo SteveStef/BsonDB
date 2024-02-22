@@ -1,7 +1,16 @@
 package db
 import (
   "reflect"
+  "sync"
 )
+
+
+type MemCache struct {
+  Data map[string]int64
+  mu sync.RWMutex
+}
+
+var Mem = MemCache{Data: make(map[string]int64), mu: sync.RWMutex{}}
 
 type EmailResponse struct {
 	Error   bool   `json:"error"`

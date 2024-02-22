@@ -60,10 +60,10 @@ func main() {
 
   // apiGroup.POST("/add-table/:id", checkRequestSize, route.AddTable)
 
-  apiGroup.POST("/migrate-tables/:id", checkRequestSize, route.MigrateTables) // working on this
+  apiGroup.POST("/migrate-tables/:id", checkRequestSize, route.MigrateTables)
 
   apiGroup.PUT("/update-field/:id/:table/:entryId", checkRequestSize, route.UpdateField)
-  apiGroup.PUT("/update-entry/:id/:table/:entryId", checkRequestSize, route.UpdateEntry)
+  //apiGroup.PUT("/update-entry/:id/:table/:entryId", checkRequestSize, route.UpdateEntry)
   
   apiGroup.DELETE("/delete-table/:id/:table", route.DeleteTable)
   apiGroup.DELETE("/delete-entry/:id/:table/:entry", route.DeleteEntry)

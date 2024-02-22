@@ -9,7 +9,7 @@ import (
 )
 
 func Root(c *gin.Context) {
-  c.JSON(http.StatusOK, gin.H{"message":"welcome to MinDB-API"})
+  c.JSON(http.StatusOK, gin.H{"message":"welcome to BsonDB API"})
 }
 
 func AdminData(c *gin.Context) {
@@ -20,7 +20,8 @@ func AdminData(c *gin.Context) {
       c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
       return
     }
-    c.JSON(http.StatusOK, dbs) 
+    db.Mem.Data["databases"] = 232 
+    c.JSON(http.StatusOK, gin.H{"databases": dbs, "Memory Cache": db.Mem.Data})
     return
   }
   c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})

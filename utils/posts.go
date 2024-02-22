@@ -10,6 +10,7 @@ import (
   "syscall"
 )
 
+
 func AccountMiddleware(email string, code string) (string, error) {
   dbId, err := CheckIfAccountExists(email)
   if err != nil {
@@ -34,8 +35,6 @@ func AccountMiddleware(email string, code string) (string, error) {
 
 // run this function to if accounts.bson gets deleted 
 func InitAccountsFile() error {
-  fileMutex.Lock() // Lock the mutex before accessing the file
-  defer fileMutex.Unlock() // Ensure the mutex is always unlocked
   var accounts Accounts
   accounts.AccountData = []Account{}
   doc := bson.M{"accounts": accounts.AccountData}
@@ -91,6 +90,11 @@ func CreateBsonFile(email string) (string, error) {
   if err != nil {
     return "", err
   }
+
+  Mem.mu.Lock()
+  Mem.Data[dbId] = 4096
+  Mem.mu.Unlock()
+
   return dbId, nil
 }
 
@@ -245,7 +249,15 @@ func DeleteTablesNotInList(dbId string, tblNames []string) error {
       }
     }
     if !found {
+      info, err := file.Info()
+      if err != nil { return fmt.Errorf("Error occurred during getting file info: %v", err) }
+
+      Mem.mu.Lock()
+      Mem.Data[dbId] -= info.Size()
+      Mem.mu.Unlock()
+
       err = os.Remove(dirPath + "/" + file.Name())
+
       if err != nil {
         return fmt.Errorf("Error occurred during deleting file: %v", err)
       }
@@ -280,6 +292,12 @@ func AddTableToDb(directory string, table Table) error {
     }
     return nil
   }
+
+  size := int64(len(bsonData))
+
+  Mem.mu.Lock()
+  Mem.Data[directory] += size
+  Mem.mu.Unlock()
 
   return nil
 }

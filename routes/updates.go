@@ -1,4 +1,5 @@
 package route
+
 import (
   "github.com/gin-gonic/gin"
   "net/http"
@@ -25,6 +26,7 @@ func UpdateField(c *gin.Context) {
   c.JSON(http.StatusOK, gin.H{"message": "Field updated"})
 }
 
+/*
 func UpdateEntry(c *gin.Context) {
   dbId := c.Param("id")
   table := c.Param("table")
@@ -49,3 +51,4 @@ func UpdateEntry(c *gin.Context) {
   }
   c.JSON(http.StatusOK, gin.H{"message": "Entry updated"})
 }
+*/

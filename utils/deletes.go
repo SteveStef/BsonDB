@@ -9,8 +9,20 @@ import (
 )
 
 func DeleteTableFromDb(dbId string, table string) error {
-  removeFileErr := os.Remove("./storage/db_"+dbId+"/"+table+".bson")
-  if removeFileErr != nil { return fmt.Errorf("Error occurred during deleting file") }
+  filePath := "./storage/db_" + dbId + "/" + table + ".bson"
+  fileInfo, err := os.Stat(filePath)
+  if err != nil { return fmt.Errorf("Error occurred during getting file info: %v", err) }
+  fileSize := fileInfo.Size()
+
+  removeFileErr := os.Remove(filePath)
+  if removeFileErr != nil { 
+    return fmt.Errorf("Error occurred during deleting file: %v", removeFileErr)
+  }
+
+  Mem.mu.Lock()
+  Mem.Data[dbId] -= fileSize
+  Mem.mu.Unlock()
+
   return nil
 }
 
@@ -26,6 +38,7 @@ func DeleteEntryFromTable(dbId string, table string, entryId string) error {
 
   fileData, err := io.ReadAll(file)
   if err != nil { return fmt.Errorf("Error occurred during reading") }
+  sizeBefore := int64(len(fileData))
 
   var tableData Table
   err = bson.Unmarshal(fileData, &tableData)
@@ -45,6 +58,12 @@ func DeleteEntryFromTable(dbId string, table string, entryId string) error {
   if err != nil { return fmt.Errorf("Error occurred during truncating") }
   _, err = file.Write(bsonData)
   if err != nil { return fmt.Errorf("Error occurred during writing to file") }
+
+  Mem.mu.Lock()
+  Mem.Data[dbId] -= sizeBefore
+  Mem.Data[dbId] += int64(len(bsonData))
+  Mem.mu.Unlock()
+
   return nil
 }
 
@@ -59,6 +78,10 @@ func DeleteBsonFile(dbId string, email string) error {
   if err != nil {
     return fmt.Errorf("Error occurred during deleting directory")
   }
+
+  Mem.mu.Lock()
+  delete(Mem.Data, dbId)
+  Mem.mu.Unlock()
 
   return nil
 }

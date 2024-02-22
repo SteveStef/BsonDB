@@ -2,12 +2,9 @@ package db
 import (
   "fmt"
   "os"
-  "sync"
   "io"
   "go.mongodb.org/mongo-driver/bson"
 )
-
-var fileMutex sync.Mutex
 
 func GetAllDBs() (Accounts, error) {
   var accounts Accounts

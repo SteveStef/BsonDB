@@ -8,9 +8,7 @@ import (
   "syscall"
 )
 
-
 func AddEntryToTable(dbId string, table string, entryId string, entry map[string]interface{}) error {
-
   path := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
   file, err := os.OpenFile(path, os.O_RDWR, 0644)
   if err != nil { return fmt.Errorf("Table not found") }
@@ -22,6 +20,7 @@ func AddEntryToTable(dbId string, table string, entryId string, entry map[string
 
   fileData, err := io.ReadAll(file)
   if err != nil { return fmt.Errorf("Error occurred during reading") }
+  sizeBefore := int64(len(fileData))
 
   var tableData Table
   err = bson.Unmarshal(fileData, &tableData)
@@ -60,9 +59,15 @@ func AddEntryToTable(dbId string, table string, entryId string, entry map[string
   _, err = file.Write(bsonData)
   if err != nil { return fmt.Errorf("Error occurred during writing to file") }
 
+  Mem.mu.Lock()
+  Mem.Data[dbId] -= sizeBefore
+  Mem.Data[dbId] += int64(len(bsonData))
+  Mem.mu.Unlock()
+
   return nil
 }
 
+/*
 func UpdateEntryInTable(dbId string, table string, entryId string, entry map[string]interface{}) error {
 
   path := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
@@ -117,9 +122,9 @@ func UpdateEntryInTable(dbId string, table string, entryId string, entry map[str
 
   return nil
 }
+*/
 
 func UpdateFieldInTable(dbId string, table string, entryId string, obj map[string]interface{}) error {
-
   path := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
   file, err := os.OpenFile(path, os.O_RDWR, 0644)
   if err != nil { return fmt.Errorf("Table not found") }
@@ -131,6 +136,7 @@ func UpdateFieldInTable(dbId string, table string, entryId string, obj map[strin
 
   fileData, err := io.ReadAll(file)
   if err != nil { return fmt.Errorf("Error occurred during reading") }
+  sizeBefore := int64(len(fileData))
 
   var tableData Table
   err = bson.Unmarshal(fileData, &tableData)
@@ -144,6 +150,7 @@ func UpdateFieldInTable(dbId string, table string, entryId string, obj map[strin
 
   // if the entry has the field, update it
   for key, value := range obj {
+    if key == tableData.Identifier { return fmt.Errorf("You connot change the identifier of the entry") }
     if _, ok := tableData.Entries[entryId][key]; ok {
       t := DetermindType(value)
       if t != tableData.EntryTemplate[key] {
@@ -154,18 +161,19 @@ func UpdateFieldInTable(dbId string, table string, entryId string, obj map[strin
       return fmt.Errorf("Field not found")
     }
   }
-
   bsonData, err := bson.Marshal(tableData)
   if err != nil { return fmt.Errorf("Error occurred during marshaling") }
-
   _, err = file.Seek(0, io.SeekStart)
   if err != nil { return fmt.Errorf("Error occurred during seeking") }
-
   err = file.Truncate(0)
   if err != nil { return fmt.Errorf("Error occurred during truncating") }
-
   _, err = file.Write(bsonData)
   if err != nil { return fmt.Errorf("Error occurred during writing to file") }
+
+  Mem.mu.Lock()
+  Mem.Data[dbId] -= sizeBefore
+  Mem.Data[dbId] += int64(len(bsonData))
+  Mem.mu.Unlock()
 
   return nil
 }

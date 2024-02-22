@@ -39,12 +39,12 @@ func Readdb(c *gin.Context) {
 func GetTable(c *gin.Context) {
   dbId := c.Param("id")
   table := c.Param("table")
-  tableData, err := db.GetTable(dbId, table)
+  entries, err := db.GetTable(dbId, table)
   if err != nil {
     c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
     return
   }
-  c.JSON(http.StatusOK, tableData)
+  c.JSON(http.StatusOK, entries)
 }
 
 func GetEntry(c *gin.Context) {

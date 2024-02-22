@@ -29,7 +29,7 @@ func GetAllDBs() (Accounts, error) {
     size += 4096
 
     // updating the size of the database (just in case of a crash)
-    // Mem.Data[account.Database] = size
+    Mem.Data[account.Database] = size
 
     accounts.AccountData[i].Size = fmt.Sprintf("%d", size)
     accounts.AccountData[i].Size += " bytes"
@@ -100,27 +100,33 @@ func ReadBsonFile(directory string) (Model, error, int64) {
   return model, nil, size 
 }
 
-func GetTable(directoryId string, table string) (Table, error) {
+func GetTable(directoryId string, table string) ([]map[string]interface{}, error) {
 
   filePath := fmt.Sprintf("./storage/db_%s/%s.bson", directoryId, table)
   file, err := os.Open(filePath)
   if err != nil {
-    return Table{}, fmt.Errorf("Table not found") 
+    return []map[string]interface{}{}, fmt.Errorf("Table not found") 
   }
   defer file.Close()
 
   bTable, err := io.ReadAll(file)
   if err != nil {
-    return Table{}, fmt.Errorf("Error occurred during reading")
+    return []map[string]interface{}{}, fmt.Errorf("Error occurred during reading")
   }
 
   var tableData Table
   err = bson.Unmarshal(bTable, &tableData)
   if err != nil {
-    return Table{}, fmt.Errorf("Error occurred during unmarshaling")
+    return []map[string]interface{}{}, fmt.Errorf("Error occurred during unmarshaling")
   }
 
-  return tableData, nil
+  // I want to store the entries in an array for ease of use for developers
+  var entries []map[string]interface{}
+  for _, entry := range tableData.Entries {
+    entries = append(entries, entry)
+  }
+
+  return entries, nil
 }
 
 func GetEntryFromTable(directoryId string, table string, entryId string) (map[string]interface{}, error) {

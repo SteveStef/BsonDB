@@ -120,8 +120,11 @@ func GetTable(directoryId string, table string) ([]map[string]interface{}, error
     return []map[string]interface{}{}, fmt.Errorf("Error occurred during unmarshaling")
   }
 
-  // I want to store the entries in an array for ease of use for developers
-  var entries []map[string]interface{}
+  entries := make([]map[string]interface{}, 0)
+  if len(tableData.Entries) == 0 {
+    return entries, nil
+  }
+
   for _, entry := range tableData.Entries {
     entries = append(entries, entry)
   }

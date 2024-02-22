@@ -18,6 +18,12 @@ func UpdateField(c *gin.Context) {
     c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
     return
   }
+
+  if db.Mem.Data[dbId] > MaxSizeOfDB {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "Your database is full"})
+    return
+  }
+
   err := db.UpdateFieldInTable(dbId, table, entryId, obj)
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

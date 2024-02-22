@@ -279,7 +279,6 @@ func AddTableToDb(directory string, table Table) error {
     if err != nil {
       return fmt.Errorf("Error occurred during writing to file: %v", err)
     }
-    return nil
   } else if os.IsNotExist(err) {
     file, err := os.Create(filePath)
     if err != nil {
@@ -290,7 +289,6 @@ func AddTableToDb(directory string, table Table) error {
     if err != nil {
       return fmt.Errorf("Error occurred during writing to file: %v", err)
     }
-    return nil
   }
 
   size := int64(len(bsonData))

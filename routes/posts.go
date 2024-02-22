@@ -8,6 +8,8 @@ import (
   "fmt"
 )
 
+var MaxSizeOfDB = int64(4500)
+
 func Createdb(c *gin.Context) {
   if c.GetHeader("Authorization") != os.Getenv("ADMIN_PASSWORD") {
     c.JSON(http.StatusUnauthorized, 
@@ -88,6 +90,11 @@ func AddEntry(c *gin.Context) {
   if err := c.ShouldBindJSON(&entry); err != nil {
     fmt.Println("Binding error")
     c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
+
+  if db.Mem.Data[dbId] > MaxSizeOfDB {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "Your database is full"})
     return
   }
 

@@ -20,7 +20,6 @@ func AdminData(c *gin.Context) {
       c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
       return
     }
-    db.Mem.Data["databases"] = 232 
     c.JSON(http.StatusOK, gin.H{"databases": dbs, "Memory Cache": db.Mem.Data})
     return
   }

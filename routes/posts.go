@@ -8,7 +8,8 @@ import (
   "fmt"
 )
 
-var MaxSizeOfDB = int64(4500)
+// 2 MB
+var MaxSizeOfDB = int64(2 * 1024 * 1024)
 
 func Createdb(c *gin.Context) {
   if c.GetHeader("Authorization") != os.Getenv("ADMIN_PASSWORD") {

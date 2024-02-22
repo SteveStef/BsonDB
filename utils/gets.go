@@ -22,10 +22,15 @@ func GetAllDBs() (Accounts, error) {
   
   for i, account := range accounts.AccountData {
     size, err := calculateDirSize("./storage/db_"+account.Database)
+
     if err != nil {
       continue
     }
     size += 4096
+
+    // updating the size of the database (just in case of a crash)
+    // Mem.Data[account.Database] = size
+
     accounts.AccountData[i].Size = fmt.Sprintf("%d", size)
     accounts.AccountData[i].Size += " bytes"
   }

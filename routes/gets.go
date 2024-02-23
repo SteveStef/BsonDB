@@ -26,6 +26,16 @@ func AdminData(c *gin.Context) {
   c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 }
 
+func GetDatabaseNames(c *gin.Context) {
+  dbId := c.Param("id")
+  tbls, err := db.GetAllTblNames(dbId)
+  if err != nil {
+    c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+    return
+  }
+  c.JSON(http.StatusOK, tbls)
+}
+
 func Readdb(c *gin.Context) {
   dbId := c.Param("id")
   model, err, size := db.ReadBsonFile(dbId)

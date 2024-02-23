@@ -37,6 +37,23 @@ func GetAllDBs() (Accounts, error) {
   return accounts, nil
 }
 
+func GetAllTblNames(dbId string) ([]string, error) {
+  var dbs []string
+  dbs = make([]string, 0)
+
+  data, err := os.ReadDir("./storage/db_"+dbId)
+  if err != nil {
+    return []string{}, fmt.Errorf("Database not found")
+  }
+
+  for _, file := range data {
+    if !file.IsDir() {
+      dbs = append(dbs, file.Name())
+    }
+  }
+  return dbs, nil
+}
+
 func calculateDirSize(dirpath string) (int64, error) {
   var dirsize int64
   files, err := os.ReadDir(dirpath)

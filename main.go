@@ -48,6 +48,7 @@ func main() {
   router.GET("/admin/:password", route.AdminData)
 
   apiGroup.GET("/database/:id", route.Readdb)
+  apiGroup.GET("/database-names/:id", route.GetDatabaseNames)
   apiGroup.GET("table/:id/:table", route.GetTable)
   apiGroup.GET("entry/:id/:table/:entry", route.GetEntry)
   apiGroup.GET("field/:id/:table/:entry/:field", route.GetField)

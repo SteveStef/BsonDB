@@ -48,7 +48,8 @@ func GetAllTblNames(dbId string) ([]string, error) {
 
   for _, file := range data {
     if !file.IsDir() {
-      dbs = append(dbs, file.Name())
+      fileNameWithoutExt := file.Name()[:len(file.Name())-5]
+      dbs = append(dbs, fileNameWithoutExt)
     }
   }
   return dbs, nil

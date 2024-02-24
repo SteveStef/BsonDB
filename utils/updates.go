@@ -8,7 +8,7 @@ import (
   "syscall"
 )
 
-func AddEntryToTable(dbId string, table string, entryId string, entry map[string]interface{}) error {
+func AddEntryToTable(dbId string, table string, entry map[string]interface{}) error {
   path := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
   file, err := os.OpenFile(path, os.O_RDWR, 0644)
   if err != nil { return fmt.Errorf("Table not found") }
@@ -26,7 +26,8 @@ func AddEntryToTable(dbId string, table string, entryId string, entry map[string
   err = bson.Unmarshal(fileData, &tableData)
   if err != nil { return fmt.Errorf("Error occurred during unmarshaling") }
 
-  if _, ok := tableData.Entries[entryId]; ok {
+  entryIdentifier := entry[tableData.Identifier].(string)
+  if _, ok := tableData.Entries[entryIdentifier]; ok {
     return fmt.Errorf("Entry already exists")
   }
 
@@ -47,7 +48,7 @@ func AddEntryToTable(dbId string, table string, entryId string, entry map[string
     }
   }
 
-  tableData.Entries[entryId] = entry
+  tableData.Entries[entryIdentifier] = entry
   bsonData, err := bson.Marshal(tableData)
   if err != nil { return fmt.Errorf("Error occurred during marshaling") }
 

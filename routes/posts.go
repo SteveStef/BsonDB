@@ -85,7 +85,6 @@ func AccountMiddleware(c *gin.Context) {
 func AddEntry(c *gin.Context) {
   dbId := c.Param("id")
   table := c.Param("table")
-  entryId := c.Param("entryId")
   var entry map[string]interface{}
 
   if err := c.ShouldBindJSON(&entry); err != nil {
@@ -99,7 +98,7 @@ func AddEntry(c *gin.Context) {
     return
   }
 
-  err := db.AddEntryToTable(dbId, table, entryId, entry)
+  err := db.AddEntryToTable(dbId, table, entry)
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
     return

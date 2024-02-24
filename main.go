@@ -49,15 +49,15 @@ func main() {
 
   apiGroup.GET("/database/:id", route.Readdb)
   apiGroup.GET("/database-names/:id", route.GetDatabaseNames)
-  apiGroup.GET("table/:id/:table", route.GetTable)
-  apiGroup.GET("entry/:id/:table/:entry", route.GetEntry)
-  apiGroup.GET("field/:id/:table/:entry/:field", route.GetField)
-  apiGroup.GET("entries/:id/:table/:field/:value", route.GetEntriesByFieldValue)
+  apiGroup.GET("/table/:id/:table", route.GetTable)
+  apiGroup.GET("/entry/:id/:table/:entry", route.GetEntry)
+  apiGroup.GET("/field/:id/:table/:entry/:field", route.GetField)
+  apiGroup.GET("/entries/:id/:table/:field/:value", route.GetEntriesByFieldValue)
 
   apiGroup.POST("/check-account", route.AccountMiddleware)
   apiGroup.POST("/createdb", route.Createdb)
   apiGroup.POST("/deletedb/:id", route.DeleteDatabase)
-  apiGroup.POST("/add-entry/:id/:table/:entryId", checkRequestSize, route.AddEntry)
+  apiGroup.POST("/add-entry/:id/:table", checkRequestSize, route.AddEntry)
 
   apiGroup.POST("/migrate-tables/:id", checkRequestSize, route.MigrateTables)
 

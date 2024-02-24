@@ -26,7 +26,11 @@ func AddEntryToTable(dbId string, table string, entry map[string]interface{}) er
   err = bson.Unmarshal(fileData, &tableData)
   if err != nil { return fmt.Errorf("Error occurred during unmarshaling") }
 
-  entryIdentifier := entry[tableData.Identifier].(string)
+  // check if the table.identifier is a key in the entry
+  entryIdentifier, ok := entry[tableData.Identifier].(string)
+  if !ok { return fmt.Errorf("Entry does not have the required identifier") }
+  
+  // check if the entry already exists
   if _, ok := tableData.Entries[entryIdentifier]; ok {
     return fmt.Errorf("Entry already exists")
   }

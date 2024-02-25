@@ -52,6 +52,12 @@ func AddEntryToTable(dbId string, table string, entry map[string]interface{}) er
     }
   }
 
+  for key, _ := range tableData.EntryTemplate {
+    if _, ok := entry[key]; !ok {
+      entry[key] = nil
+    }
+  }
+
   tableData.Entries[entryIdentifier] = entry
   bsonData, err := bson.Marshal(tableData)
   if err != nil { return fmt.Errorf("Error occurred during marshaling") }

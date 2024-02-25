@@ -5,6 +5,7 @@ import (
   "net/http"
   "os"
   "BsonDB-API/utils"
+  "encoding/json"
 )
 
 // 2 MB
@@ -87,36 +88,30 @@ func AddEntry(c *gin.Context) {
     c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
     return
   }
-
   dbId, ok := body["databaseId"].(string)
   if !ok {
     c.JSON(http.StatusBadRequest, gin.H{"error": "databaseId is required"})
     return
   }
-
   table, ok := body["table"].(string)
   if !ok {
     c.JSON(http.StatusBadRequest, gin.H{"error": "table is required"})
     return
   }
-
   entry, ok := body["entry"].(map[string]interface{})
   if !ok {
     c.JSON(http.StatusBadRequest, gin.H{"error": "entry is required"})
     return
   }
-
   if db.Mem.Data[dbId] > MaxSizeOfDB {
     c.JSON(http.StatusBadRequest, gin.H{"error": "Your database is full"})
     return
   }
-
   err := db.AddEntryToTable(dbId, table, entry)
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
     return
   }
-
   c.JSON(http.StatusOK, gin.H{"message": "Entry added"})
 }
 
@@ -163,25 +158,33 @@ func DeleteDatabase(c *gin.Context) {
 
 func MigrateTables(c *gin.Context) {
   var body map[string]interface{}
-  var tables []db.Table
 
   if err := c.ShouldBindJSON(&body); err != nil {
     c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
     return
   }
-
   dbId, ok := body["databaseId"].(string)
   if !ok {
     c.JSON(http.StatusBadRequest, gin.H{"error": "databaseId is required"})
     return
   }
-
   if _, ok := body["tables"]; !ok {
     c.JSON(http.StatusBadRequest, gin.H{"error": "tables is required"})
     return
   }
 
-  tables = body["tables"].([]db.Table)
+  tblJson, error := json.Marshal(body["tables"])
+  if error != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": error.Error()})
+    return
+  }
+
+  var tables []db.Table
+  error = json.Unmarshal(tblJson, &tables)
+  if error != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": error.Error()})
+    return
+  }
 
   err := db.MigrateTables(dbId, tables)
   if err != nil {

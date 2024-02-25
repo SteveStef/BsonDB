@@ -16,9 +16,6 @@ func AccountMiddleware(email string, code string) (string, error) {
   if err != nil {
     return "", fmt.Errorf("Error occurred during checking if account exists: %v", err)
   }
-  if dbId != "" {
-    return dbId, nil
-  }
 
   // I dont want to wait for this function to finish
   go func() {
@@ -30,7 +27,7 @@ func AccountMiddleware(email string, code string) (string, error) {
     }
   }()
 
-  return "", nil
+  return dbId, nil
 }
 
 // run this function to if accounts.bson gets deleted 

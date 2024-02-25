@@ -57,7 +57,6 @@ func AccountMiddleware(c *gin.Context) {
     c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
     return
   }
-  // have a if condition to check if email and code ae in the request
   if _, ok := req["email"]; !ok {
     c.JSON(http.StatusBadRequest, gin.H{"error": "Email is required"})
     return
@@ -72,11 +71,8 @@ func AccountMiddleware(c *gin.Context) {
     c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
     return
   }
-  if dbId == "" {
-    c.JSON(http.StatusOK, gin.H{"email": true, "message": "Verification code sent"})
-    return
-  }
-  c.JSON(http.StatusOK, gin.H{"email": false, "id": dbId})
+
+  c.JSON(http.StatusOK, gin.H{"id": dbId})
 }
 
 

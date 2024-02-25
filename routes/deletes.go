@@ -8,8 +8,22 @@ import (
 
 // delete a table from a database
 func DeleteTable(c *gin.Context) {
-  dbId := c.Param("id")
-  table := c.Param("table")
+  var body map[string]string
+  if err := c.ShouldBindJSON(&body); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
+  dbId, ok := body["databaseId"]
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "databaseId is required"})
+    return
+  }
+  table, ok := body["table"]
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "table is required"})
+    return
+  }
+
   err := db.DeleteTableFromDb(dbId, table)
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -20,9 +34,27 @@ func DeleteTable(c *gin.Context) {
 
 // delete an entry from a table
 func DeleteEntry(c *gin.Context) {
-  dbId := c.Param("id")
-  table := c.Param("table")
-  entry := c.Param("entry")
+  var body map[string]string
+  if err := c.ShouldBindJSON(&body); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
+  dbId, ok := body["databaseId"]
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "databaseId is required"})
+    return
+  }
+  table, ok := body["table"]
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "table is required"})
+    return
+  }
+  entry, ok := body["entry"]
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "entry is required"})
+    return
+  }
+
   err := db.DeleteEntryFromTable(dbId, table, entry)
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

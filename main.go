@@ -45,29 +45,29 @@ func main() {
   apiGroup := router.Group("/api")
 
   router.GET("/", route.Root)
-  router.GET("/admin/:password", route.AdminData)
+  router.POST("/admin", route.AdminData)
 
-  apiGroup.GET("/database/:id", route.Readdb)
-  apiGroup.GET("/database-names/:id", route.GetDatabaseNames)
-  apiGroup.GET("/table/:id/:table", route.GetTable)
-  apiGroup.GET("/entry/:id/:table/:entry", route.GetEntry)
-  apiGroup.GET("/field/:id/:table/:entry/:field", route.GetField)
-  apiGroup.GET("/entries/:id/:table/:field/:value", route.GetEntriesByFieldValue)
+  apiGroup.POST("/database", route.Readdb)
+  apiGroup.POST("/database-names", route.GetDatabaseNames)
+  apiGroup.POST("/table", route.GetTable)
+  apiGroup.POST("/entry", route.GetEntry)
+  apiGroup.POST("/field", route.GetField)
+  apiGroup.POST("/entries", route.GetEntriesByFieldValue)
 
   apiGroup.POST("/check-account", route.AccountMiddleware)
   apiGroup.POST("/createdb", route.Createdb)
-  apiGroup.POST("/deletedb/:id", route.DeleteDatabase)
-  apiGroup.POST("/add-entry/:id/:table", checkRequestSize, route.AddEntry)
+  apiGroup.POST("/deletedb", route.DeleteDatabase)
+  apiGroup.POST("/add-entry", checkRequestSize, route.AddEntry)
 
-  apiGroup.POST("/migrate-tables/:id", checkRequestSize, route.MigrateTables)
+  apiGroup.POST("/migrate-tables", checkRequestSize, route.MigrateTables)
 
-  apiGroup.PUT("/update-field/:id/:table/:entryId", checkRequestSize, route.UpdateField)
+  apiGroup.PUT("/update-field", checkRequestSize, route.UpdateField)
 
   // apiGroup.PUT("/update-entry/:id/:table/:entryId", checkRequestSize, route.UpdateEntry)
   // apiGroup.POST("/add-table/:id", checkRequestSize, route.AddTable)
   
-  apiGroup.DELETE("/delete-table/:id/:table", route.DeleteTable)
-  apiGroup.DELETE("/delete-entry/:id/:table/:entry", route.DeleteEntry)
+  apiGroup.POST("/delete-table", route.DeleteTable)
+  apiGroup.POST("/delete-entry", route.DeleteEntry)
 
   port := os.Getenv("PORT")
   if port == "" {

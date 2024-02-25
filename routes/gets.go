@@ -5,7 +5,6 @@ import (
   "net/http"
   "os"
   "BsonDB-API/utils"
-  "fmt"
 )
 
 func Root(c *gin.Context) {
@@ -13,7 +12,16 @@ func Root(c *gin.Context) {
 }
 
 func AdminData(c *gin.Context) {
-  password := c.Param("password")
+  var body map[string]string
+  if err := c.ShouldBindJSON(&body); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
+  password, ok := body["password"]
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "password is required"})
+    return
+  }
   if password == os.Getenv("ADMIN_PASSWORD") {
     dbs, err := db.GetAllDBs()
     if err != nil {
@@ -27,8 +35,18 @@ func AdminData(c *gin.Context) {
 }
 
 func GetDatabaseNames(c *gin.Context) {
-  dbId := c.Param("id")
-  tbls, err := db.GetAllTblNames(dbId)
+  var body map[string]string
+  if err := c.ShouldBindJSON(&body); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
+
+  if _, ok := body["databaseId"]; !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "databaseId is required"})
+    return
+  }
+
+  tbls, err := db.GetAllTblNames(body["databaseId"])
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
     return
@@ -37,8 +55,16 @@ func GetDatabaseNames(c *gin.Context) {
 }
 
 func Readdb(c *gin.Context) {
-  dbId := c.Param("id")
-  model, err, size := db.ReadBsonFile(dbId)
+  var body map[string]string
+  if err := c.ShouldBindJSON(&body); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
+  if _, ok := body["databaseId"]; !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "databaseId is required"})
+    return
+  }
+  model, err, size := db.ReadBsonFile(body["databaseId"])
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not found"})
     return
@@ -47,9 +73,23 @@ func Readdb(c *gin.Context) {
 }
 
 func GetTable(c *gin.Context) {
-  dbId := c.Param("id")
-  table := c.Param("table")
-  entries, err := db.GetTable(dbId, table)
+  var body map[string]string
+
+  if err := c.ShouldBindJSON(&body); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
+
+  if _, ok := body["databaseId"]; !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "databaseId is required"})
+    return
+  }
+
+  if _, ok := body["table"]; !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "table is required"})
+    return
+  }
+  entries, err := db.GetTable(body["databaseId"], body["table"])
   if err != nil {
     c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
     return
@@ -58,10 +98,21 @@ func GetTable(c *gin.Context) {
 }
 
 func GetEntry(c *gin.Context) {
-  dbId := c.Param("id")
-  table := c.Param("table")
-  entry := c.Param("entry")
-  entryData, err := db.GetEntryFromTable(dbId, table, entry)
+  var body map[string]string
+  if err := c.ShouldBindJSON(&body); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
+
+  validKeys := []string{"databaseId", "table", "entryId"}
+  for _, key := range validKeys {
+    if _, ok := body[key]; !ok {
+      c.JSON(http.StatusBadRequest, gin.H{"error": key + " is required"})
+      return
+    }
+  }
+
+  entryData, err := db.GetEntryFromTable(body["databaseId"], body["table"], body["entryId"])
   if err != nil {
     c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
     return
@@ -70,12 +121,21 @@ func GetEntry(c *gin.Context) {
 }
 
 func GetField(c *gin.Context) {
-  dbId := c.Param("id")
-  table := c.Param("table")
-  entryId := c.Param("entry")
-  field := c.Param("field")
+  var body map[string]string
+  if err := c.ShouldBindJSON(&body); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
 
-  fieldData, err := db.GetFieldFromEntry(dbId, table, entryId, field)
+  validKeys := []string{"databaseId", "table", "entryId", "field"}
+  for _, key := range validKeys {
+    if _, ok := body[key]; !ok {
+      c.JSON(http.StatusBadRequest, gin.H{"error": key + " is required"})
+      return
+    }
+  }
+
+  fieldData, err := db.GetFieldFromEntry(body["databaseId"], body["table"], body["entryId"], body["field"])
   if err != nil {
     c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
     return
@@ -84,18 +144,25 @@ func GetField(c *gin.Context) {
 }
 
 func GetEntriesByFieldValue(c *gin.Context) {
-  dbId := c.Param("id")
-  table := c.Param("table")
-  field := c.Param("field")
-  value := c.Param("value")
+  var body map[string]string
+  if err := c.ShouldBindJSON(&body); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
+  validKeys := []string{"databaseId", "table", "field", "value"}
+  for _, key := range validKeys {
+    if _, ok := body[key]; !ok {
+      c.JSON(http.StatusBadRequest, gin.H{"error": key + " is required"})
+      return
+    }
+  }
 
-  fmt.Println(dbId, table, field, value)
-  entryData, err := db.GetEntriesByFieldValue(dbId, table, field, value)
+  entries, err := db.GetEntriesByFieldValue(body["databaseId"], body["table"], body["field"], body["value"])
   if err != nil {
     c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
     return
   }
-  c.JSON(http.StatusOK, entryData)
+  c.JSON(http.StatusOK, entries)
 }
 
 

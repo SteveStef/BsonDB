@@ -8,14 +8,42 @@ import (
 )
 
 func UpdateField(c *gin.Context) {
-  dbId := c.Param("id")
-  table := c.Param("table")
-  entryId := c.Param("entryId")
-  var obj map[string]interface{}
+  var body map[string]interface{}
 
-  if err := c.ShouldBindJSON(&obj); err != nil {
+  if err := c.ShouldBindJSON(&body); err != nil {
     fmt.Println("Binding error")
     c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
+  validFields := []string{"databaseId", "table", "entryId", "entry"}
+  for _, field := range validFields {
+    if _, ok := body[field]; !ok {
+      c.JSON(http.StatusBadRequest, gin.H{"error": field + " is required"})
+      return
+    }
+  }
+
+  dbId, ok := body["databaseId"].(string)
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "databaseId is required"})
+    return
+  }
+
+  table, ok := body["table"].(string)
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "table is required"})
+    return
+  }
+
+  entryId, ok := body["entryId"].(string)
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "entryId is required"})
+    return
+  }
+
+  obj, ok := body["entry"].(map[string]interface{})
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "entry is required"})
     return
   }
 
@@ -31,30 +59,3 @@ func UpdateField(c *gin.Context) {
   }
   c.JSON(http.StatusOK, gin.H{"message": "Field updated"})
 }
-
-/*
-func UpdateEntry(c *gin.Context) {
-  dbId := c.Param("id")
-  table := c.Param("table")
-  entryId := c.Param("entryId")
-  var entry map[string]interface{} 
-
-  if c.Request.ContentLength > 1048576 {
-    c.JSON(http.StatusBadRequest, gin.H{"error": "Request size too large"})
-    return
-  }
-
-  if err := c.ShouldBindJSON(&entry); err != nil {
-    fmt.Println("Binding error")
-    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-    return
-  }
-
-  err := db.UpdateEntryInTable(dbId, table, entryId, entry)
-  if err != nil {
-    c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-    return
-  }
-  c.JSON(http.StatusOK, gin.H{"message": "Entry updated"})
-}
-*/

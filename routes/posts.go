@@ -5,7 +5,6 @@ import (
   "net/http"
   "os"
   "BsonDB-API/utils"
-  "fmt"
 )
 
 // 2 MB
@@ -40,7 +39,6 @@ func Createdb(c *gin.Context) {
   }
   c.JSON(http.StatusOK, gin.H{"id": dbId})
 }
-
 
 func AccountMiddleware(c *gin.Context) {
   if c.GetHeader("Authorization") != os.Getenv("ADMIN_PASSWORD") {
@@ -83,13 +81,28 @@ func AccountMiddleware(c *gin.Context) {
 
 // Add a field to a table
 func AddEntry(c *gin.Context) {
-  dbId := c.Param("id")
-  table := c.Param("table")
-  var entry map[string]interface{}
+  var body map[string]interface{}
 
-  if err := c.ShouldBindJSON(&entry); err != nil {
-    fmt.Println("Binding error")
+  if err := c.ShouldBindJSON(&body); err != nil {
     c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
+
+  dbId, ok := body["databaseId"].(string)
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "databaseId is required"})
+    return
+  }
+
+  table, ok := body["table"].(string)
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "table is required"})
+    return
+  }
+
+  entry, ok := body["entry"].(map[string]interface{})
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "entry is required"})
     return
   }
 
@@ -108,7 +121,23 @@ func AddEntry(c *gin.Context) {
 }
 
 func DeleteDatabase(c *gin.Context) {
-  dbId := c.Param("id")
+  var body map[string]string
+  if err := c.ShouldBindJSON(&body); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+    return
+  }
+
+  dbId, ok := body["databaseId"]
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "databaseId is required"})
+    return
+  }
+
+  email, ok := body["email"]
+  if !ok {
+    c.JSON(http.StatusInternalServerError, gin.H{"error": "Email not found"})
+    return
+  }
 
   auhtorization := c.GetHeader("Authorization")
   if auhtorization != os.Getenv("ADMIN_PASSWORD") {
@@ -123,13 +152,7 @@ func DeleteDatabase(c *gin.Context) {
     return
   }
 
-  var email map[string]string
-  if err := c.ShouldBindJSON(&email); err != nil {
-    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-    return
-  }
-
-  err := db.DeleteBsonFile(dbId, email["email"])
+  err := db.DeleteBsonFile(dbId, email)
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
     return
@@ -139,13 +162,26 @@ func DeleteDatabase(c *gin.Context) {
 }
 
 func MigrateTables(c *gin.Context) {
-  dbId := c.Param("id")
+  var body map[string]interface{}
   var tables []db.Table
 
-  if err := c.ShouldBindJSON(&tables); err != nil {
-    c.JSON(http.StatusBadRequest, gin.H{"error": "The JSON table is not valid"})
+  if err := c.ShouldBindJSON(&body); err != nil {
+    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
     return
   }
+
+  dbId, ok := body["databaseId"].(string)
+  if !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "databaseId is required"})
+    return
+  }
+
+  if _, ok := body["tables"]; !ok {
+    c.JSON(http.StatusBadRequest, gin.H{"error": "tables is required"})
+    return
+  }
+
+  tables = body["tables"].([]db.Table)
 
   err := db.MigrateTables(dbId, tables)
   if err != nil {

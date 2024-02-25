@@ -49,7 +49,7 @@ func DeleteEntry(c *gin.Context) {
     c.JSON(http.StatusBadRequest, gin.H{"error": "table is required"})
     return
   }
-  entry, ok := body["entry"]
+  entry, ok := body["entryId"]
   if !ok {
     c.JSON(http.StatusBadRequest, gin.H{"error": "entry is required"})
     return

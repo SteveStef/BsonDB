@@ -7,7 +7,10 @@ import (
 	"net/http"
   "fmt"
   "BsonDB-API/routes"
+  "BsonDB-API/ssh"
 )
+
+var Client *vm.SSHClient
 
 func checkRequestSize(c *gin.Context) {
   const MaxRequestSize = 1048576
@@ -33,6 +36,44 @@ func CORSMiddleware() gin.HandlerFunc {
   }
 }
 
+func CloseConnection(c *gin.Context) {
+  Client.CloseAllSessions()
+  Client.Open = false;
+  c.JSON(http.StatusOK, gin.H{"message":"Connection to VM was closed"})
+}
+
+func Connect() {
+  config, error := vm.DefaultConfig()
+  if error != nil { fmt.Println("Error loading the config") }
+
+  Client, error = vm.NewSSHClient(config)
+  if error != nil { fmt.Println("Unable to create the client")}
+
+  fmt.Println("The connection to the VM has been initialized")
+}
+
+func getDir(c *gin.Context) {
+
+  if !Client.Open {
+    c.JSON(http.StatusOK, gin.H{"message":"The database is closed at the moment"})
+    return
+  }
+
+  session, error := Client.GetSession()
+  if error != nil { fmt.Println("Unable to get the session")}
+  defer Client.ReturnSession(session)
+
+  output, err := session.CombinedOutput("ls")
+  if err != nil {
+    c.JSON(http.StatusOK, gin.H{"error": err})
+    return
+  }
+
+  outputStr := string(output)
+
+  c.JSON(http.StatusOK, gin.H{"Hello": outputStr})
+}
+
 func main() {
   err := godotenv.Load()
   if err != nil { fmt.Println("Error loading .env file") }
@@ -44,9 +85,14 @@ func main() {
 
   apiGroup := router.Group("/api")
 
-  router.GET("/", route.Root)
-  router.POST("/admin", route.AdminData)
+  Connect() 
 
+  router.GET("/", route.Root)
+
+  router.GET("/getDir", getDir)
+  router.GET("/CloseConnection", CloseConnection)
+
+  router.POST("/admin", route.AdminData)
   apiGroup.POST("/database", route.Readdb)
   apiGroup.POST("/database-names", route.GetDatabaseNames)
   apiGroup.POST("/table", route.GetTable)
@@ -62,9 +108,6 @@ func main() {
   apiGroup.POST("/migrate-tables", checkRequestSize, route.MigrateTables)
 
   apiGroup.PUT("/update-field", checkRequestSize, route.UpdateField)
-
-  // apiGroup.PUT("/update-entry/:id/:table/:entryId", checkRequestSize, route.UpdateEntry)
-  // apiGroup.POST("/add-table/:id", checkRequestSize, route.AddTable)
   
   apiGroup.POST("/delete-table", route.DeleteTable)
   apiGroup.POST("/delete-entry", route.DeleteEntry)

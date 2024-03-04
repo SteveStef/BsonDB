@@ -8,8 +8,8 @@ import (
   "sync"
   "io"
   "syscall"
+  "BsonDB-API/ssh"
 )
-
 
 func AccountMiddleware(email string, code string) (string, error) {
   dbId, err := CheckIfAccountExists(email)
@@ -75,19 +75,38 @@ func CheckIfAccountExists(email string) (string, error) {
 }
 
 
-func CreateBsonFile(email string) (string, error) {
+func CreateDatabase(email string) (string, error) {
+
+  if !vm.Client.Open {
+    return "", fmt.Errorf("The database is down at the moment")
+  }
+
   var dbId string
   dbId = uuid.New().String()
+
   err := AddAccount(email, dbId)
   if err != nil {
     return "", fmt.Errorf("Error occurred during adding account: %v", err)
   }
+
   var nameOfDb string = "db_"+dbId
-  err = os.Mkdir("./storage/"+nameOfDb, 0744)
+  session, error := vm.Client.GetSession()
+  if error != nil {
+    return "", fmt.Errorf("Error occurred when creating the sessions: %v", error)
+  }
+  defer session.Close()
+
+  command := fmt.Sprintf("mkdir BsonDB/%s", nameOfDb)
+  output, err := session.CombinedOutput(command)
   if err != nil {
     return "", err
   }
 
+  outputStr := string(output)
+  if len(outputStr) > 0 {
+    return "", fmt.Errorf("There was an error when creating the database: %s", outputStr)
+  }
+  
   Mem.mu.Lock()
   Mem.Data[dbId] = 4096
   Mem.mu.Unlock()
@@ -192,34 +211,25 @@ func ValidateTable(table *Table) error {
 func MigrateTables(dbId string, tables []Table) error {
   var tblNames []string
   var errs []error
-
-  // Use a wait group to wait for all goroutines to finish
   var wg sync.WaitGroup
   wg.Add(len(tables))
-
   for _, table := range tables {
     err := ValidateTable(&table)
     if err != nil {
       return fmt.Errorf("Error occurred during validating table: %v", err)
     }
-
     tblNames = append(tblNames, table.Name)
     go func(table Table) {
       defer wg.Done()
       if err := AddTableToDb(dbId, table); err != nil {
-        errs = append(errs, fmt.Errorf("Error occurred during adding table, make sure your database ID is valid"))
+        errs = append(errs, fmt.Errorf("Error occurred during adding table, make sure your database ID is valid: %v", err))
       }
     }(table)
   }
-
-  // Wait for all goroutines to finish
   wg.Wait()
-
-  // Delete tables not in the list after all tables have been processed
   if err := DeleteTablesNotInList(dbId, tblNames); err != nil {
-    errs = append(errs, fmt.Errorf("Error occurred during removing unwanted tables"))
+    errs = append(errs, fmt.Errorf("Error occurred during removing unwanted tables: %v", err))
   }
-
   if len(errs) >  0 {
     return errs[0]
   }
@@ -228,37 +238,32 @@ func MigrateTables(dbId string, tables []Table) error {
 
 func DeleteTablesNotInList(dbId string, tblNames []string) error {
 
-  dirPath := "./storage/db_" + dbId
-  files, err := os.ReadDir(dirPath)
-  if err != nil {
-    return fmt.Errorf("Error occurred during reading directory: %v", err)
+  dirPath := "BsonDB/db_" + dbId
+  session, error := vm.Client.GetSession()
+  if error != nil {
+    return fmt.Errorf("Error occurred when creating the sessions: %v", error)
+  }
+  defer session.Close()
+
+  // finish the command
+  fileNames := ""
+  for idx, name := range tblNames {
+    if idx == 0 {
+      fileNames += "-name '"+ name + ".bson' "
+    } else {
+      fileNames += "-o -name '"+ name + ".bson' "
+    }
   }
 
-  for _, file := range files {
-    if file.IsDir() {
-      continue
-    }
-    var found bool
-    for _, tblName := range tblNames {
-      if file.Name() == tblName+".bson" {
-        found = true
-        break
-      }
-    }
-    if !found {
-      info, err := file.Info()
-      if err != nil { return fmt.Errorf("Error occurred during getting file info: %v", err) }
-
-      Mem.mu.Lock()
-      Mem.Data[dbId] -= info.Size()
-      Mem.mu.Unlock()
-
-      err = os.Remove(dirPath + "/" + file.Name())
-
-      if err != nil {
-        return fmt.Errorf("Error occurred during deleting file: %v", err)
-      }
-    }
+  var command string
+  if fileNames == "" {
+    command = fmt.Sprintf(`rm -r %s/*`, dirPath)
+  } else {
+    command = fmt.Sprintf(`cd %s && find . -type f ! \( %s\) -exec rm -f {} +`, dirPath, fileNames)
+  }
+  
+  if err := session.Run(command); err != nil {
+    return fmt.Errorf("Failed to run command: %v", err)
   }
   return nil
 }
@@ -267,25 +272,24 @@ func AddTableToDb(directory string, table Table) error {
 
   bsonData, err := bson.Marshal(table)
   if err != nil { return fmt.Errorf("Error occurred during marshaling: %v", err) }
+  path := fmt.Sprintf("BsonDB/db_%s/%s.bson", directory, table.Name)
 
-  dirPath := "./storage/db_" + directory
-  filePath := dirPath + "/" + table.Name + ".bson"
+  session, error := vm.Client.GetSession()
+  if error != nil {
+    return fmt.Errorf("Error occurred when creating the sessions: %v", error)
+  }
+  defer session.Close()
 
-  if _, err := os.Stat(filePath); err == nil {
-    err = os.WriteFile(filePath, bsonData,  0644)
-    if err != nil {
-      return fmt.Errorf("Error occurred during writing to file: %v", err)
-    }
-  } else if os.IsNotExist(err) {
-    file, err := os.Create(filePath)
-    if err != nil {
-      return fmt.Errorf("Error occurred during creating file: %v", err)
-    }
-    defer file.Close()
-    _, err = file.Write(bsonData)
-    if err != nil {
-      return fmt.Errorf("Error occurred during writing to file: %v", err)
-    }
+  go func() {
+    w, _ := session.StdinPipe()
+    defer w.Close()
+    fmt.Fprintf(w, "flock -w 10 %s -c 'cat > %s'\n", path, path)
+    w.Write(bsonData)
+    fmt.Fprint(w, "\x00")
+  }()
+
+  if err := session.Run("/bin/bash"); err != nil {
+    return fmt.Errorf("Failed to run command: %v", err)
   }
 
   size := int64(len(bsonData))

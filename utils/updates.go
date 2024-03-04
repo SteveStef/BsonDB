@@ -2,28 +2,24 @@ package db
 
 import (
   "fmt"
-  "os"
   "go.mongodb.org/mongo-driver/bson"
-  "io"
-  "syscall"
+  "BsonDB-API/ssh"
 )
 
 func AddEntryToTable(dbId string, table string, entry map[string]interface{}) error {
-  path := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
-  file, err := os.OpenFile(path, os.O_RDWR, 0644)
-  if err != nil { return fmt.Errorf("Table not found") }
-  defer file.Close()
 
-	err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
-  if err != nil { return fmt.Errorf("Error locking file:", err) }
-	defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+  path := fmt.Sprintf("BsonDB/db_%s/%s.bson", dbId, table)
+  session, err := vm.Client.GetSession()
+  if err != nil { return fmt.Errorf("Error occurred when creating the sessions1: %v", err) }
+  defer session.Close()
 
-  fileData, err := io.ReadAll(file)
-  if err != nil { return fmt.Errorf("Error occurred during reading") }
-  sizeBefore := int64(len(fileData))
+  command := fmt.Sprintf("cat %s", path)
+  output, err := session.Output(command)
+  if err != nil { return fmt.Errorf("Error occurred while reading the file: %v", err) }
+  if len(output) > 0 { output = output[:len(output)-1] }
 
   var tableData Table
-  err = bson.Unmarshal(fileData, &tableData)
+  err = bson.Unmarshal(output, &tableData)
   if err != nil { return fmt.Errorf("Error occurred during unmarshaling") }
 
   // check if the table.identifier is a key in the entry
@@ -62,98 +58,39 @@ func AddEntryToTable(dbId string, table string, entry map[string]interface{}) er
   bsonData, err := bson.Marshal(tableData)
   if err != nil { return fmt.Errorf("Error occurred during marshaling") }
 
-  _, err = file.Seek(0, io.SeekStart)
-  if err != nil { return fmt.Errorf("Error occurred during seeking") }
-  err = file.Truncate(0)
-  if err != nil { return fmt.Errorf("Error occurred during truncating") }
+  session2, err := vm.Client.GetSession()
+  if err != nil { return fmt.Errorf("Error occurred when creating the sessions2: %v", err) }
+  defer session2.Close()
 
-  _, err = file.Write(bsonData)
-  if err != nil { return fmt.Errorf("Error occurred during writing to file") }
+  go func() {
+    w, _ := session2.StdinPipe()
+    defer w.Close()
+    fmt.Fprintf(w, "flock -w 10 %s -c 'cat > %s'\n", path, path)
+    w.Write(bsonData)
+    fmt.Fprint(w, "\x00")
+  }()
 
-  Mem.mu.Lock()
-  Mem.Data[dbId] -= sizeBefore
-  Mem.Data[dbId] += int64(len(bsonData))
-  Mem.mu.Unlock()
+  if err := session2.Run("/bin/bash"); err != nil {
+    return fmt.Errorf("Failed to run command: %v", err)
+  }
 
   return nil
 }
-
-/*
-func UpdateEntryInTable(dbId string, table string, entryId string, entry map[string]interface{}) error {
-
-  path := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
-  file, err := os.OpenFile(path, os.O_RDWR, 0644)
-  if err != nil { return fmt.Errorf("Table not found") }
-  defer file.Close()
-
-  err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
-  if err != nil { return fmt.Errorf("Error locking file:", err) }
-  defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
-
-  fileData, err := io.ReadAll(file)
-  if err != nil { return fmt.Errorf("Error occurred during reading") }
-
-  var tableData Table
-  err = bson.Unmarshal(fileData, &tableData)
-  if err != nil {
-    return fmt.Errorf("Error occurred during unmarshaling")
-  }
-
-  if _, ok := tableData.Entries[entryId]; !ok {
-    return fmt.Errorf("Entry not found")
-  }
-
-  // make sure that the entry has all the required fields
-  for _, requiredField := range tableData.Requires {
-    if _, ok := entry[requiredField]; !ok {
-      return fmt.Errorf("Entry does not have required field: " + requiredField)
-    }
-  }
-
-  for key, value := range entry {
-    if _, ok := tableData.EntryTemplate[key]; !ok {
-      return fmt.Errorf("Field not found in entry template")
-    }
-    t := DetermindType(value)
-    if t != tableData.EntryTemplate[key] {
-      return fmt.Errorf("Unexpected type on field %s, expected %s, got %s", key, tableData.EntryTemplate[key], t)
-    }
-  }
-
-  tableData.Entries[entryId] = entry
-  bsonData, err := bson.Marshal(tableData)
-  if err != nil { return fmt.Errorf("Error occurred during marshaling") }
-
-  _, err = file.Seek(0, io.SeekStart)
-  if err != nil { return fmt.Errorf("Error occurred during seeking") }
-  err = file.Truncate(0)
-  if err != nil { return fmt.Errorf("Error occurred during truncating") }
-  _, err = file.Write(bsonData)
-  if err != nil { return fmt.Errorf("Error occurred during writing to file") }
-
-  return nil
-}
-*/
 
 func UpdateFieldInTable(dbId string, table string, entryId string, obj map[string]interface{}) error {
-  path := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
-  file, err := os.OpenFile(path, os.O_RDWR, 0644)
-  if err != nil { return fmt.Errorf("Table not found") }
-  defer file.Close()
+  path := fmt.Sprintf("BsonDB/db_%s/%s.bson", dbId, table)
+  session, err := vm.Client.GetSession()
+  if err != nil { return fmt.Errorf("Error occurred when creating the sessions: %v", err) }
+  defer session.Close()
 
-  err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
-  if err != nil { return fmt.Errorf("Error locking file:", err) }
-  defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
-
-  fileData, err := io.ReadAll(file)
-  if err != nil { return fmt.Errorf("Error occurred during reading") }
-  sizeBefore := int64(len(fileData))
+  command := fmt.Sprintf("cat %s", path)
+  output, err := session.Output(command)
+  if err != nil { return fmt.Errorf("Error occurred while reading the file: %v", err) }
+  if len(output) > 0 { output = output[:len(output)-1] }
 
   var tableData Table
-  err = bson.Unmarshal(fileData, &tableData)
-  if err != nil {
-    return fmt.Errorf("Error occurred during unmarshaling")
-  }
+  err = bson.Unmarshal(output, &tableData)
+  if err != nil { return fmt.Errorf("Error occurred during unmarshaling") }
 
   if _, ok := tableData.Entries[entryId]; !ok {
     return fmt.Errorf("Entry not found")
@@ -173,18 +110,23 @@ func UpdateFieldInTable(dbId string, table string, entryId string, obj map[strin
     }
   }
   bsonData, err := bson.Marshal(tableData)
-  if err != nil { return fmt.Errorf("Error occurred during marshaling") }
-  _, err = file.Seek(0, io.SeekStart)
-  if err != nil { return fmt.Errorf("Error occurred during seeking") }
-  err = file.Truncate(0)
-  if err != nil { return fmt.Errorf("Error occurred during truncating") }
-  _, err = file.Write(bsonData)
-  if err != nil { return fmt.Errorf("Error occurred during writing to file") }
 
-  Mem.mu.Lock()
-  Mem.Data[dbId] -= sizeBefore
-  Mem.Data[dbId] += int64(len(bsonData))
-  Mem.mu.Unlock()
+  session2, err := vm.Client.GetSession()
+  if err != nil { return fmt.Errorf("Error occurred when creating the sessions: %v", err) }
+  defer session2.Close()
+
+
+  go func() {
+    w, _ := session2.StdinPipe()
+    defer w.Close()
+    fmt.Fprintf(w, "flock -w 10 %s -c 'cat > %s'\n", path, path)
+    w.Write(bsonData)
+    fmt.Fprint(w, "\x00")
+  }()
+
+  if err := session2.Run("/bin/bash"); err != nil {
+    return fmt.Errorf("Failed to run command: %v", err)
+  }
 
   return nil
 }

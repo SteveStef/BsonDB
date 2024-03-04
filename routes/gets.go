@@ -3,7 +3,7 @@ package route
 import (
   "github.com/gin-gonic/gin"
   "net/http"
-  "os"
+  //"os"
   "BsonDB-API/utils"
 )
 
@@ -11,28 +11,6 @@ func Root(c *gin.Context) {
   c.JSON(http.StatusOK, gin.H{"message":"welcome to BsonDB API"})
 }
 
-func AdminData(c *gin.Context) {
-  var body map[string]string
-  if err := c.ShouldBindJSON(&body); err != nil {
-    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-    return
-  }
-  password, ok := body["password"]
-  if !ok {
-    c.JSON(http.StatusBadRequest, gin.H{"error": "password is required"})
-    return
-  }
-  if password == os.Getenv("ADMIN_PASSWORD") {
-    dbs, err := db.GetAllDBs()
-    if err != nil {
-      c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-      return
-    }
-    c.JSON(http.StatusOK, gin.H{"databases": dbs, "Memory Cache": db.Mem.Data})
-    return
-  }
-  c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-}
 
 func GetDatabaseNames(c *gin.Context) {
   var body map[string]string
@@ -89,7 +67,9 @@ func GetTable(c *gin.Context) {
     c.JSON(http.StatusBadRequest, gin.H{"error": "table is required"})
     return
   }
+
   entries, err := db.GetTable(body["databaseId"], body["table"])
+
   if err != nil {
     c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
     return

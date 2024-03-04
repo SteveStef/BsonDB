@@ -29,15 +29,18 @@ func Createdb(c *gin.Context) {
     c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
     return
   }
+
   if _, ok := req["email"]; !ok {
     c.JSON(http.StatusBadRequest, gin.H{"error": "Email is required"})
     return
   }
-  dbId, err := db.CreateBsonFile(req["email"])
+
+  dbId, err := db.CreateDatabase(req["email"])
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
     return
   }
+
   c.JSON(http.StatusOK, gin.H{"id": dbId})
 }
 

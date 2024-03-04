@@ -1,16 +1,14 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
-  "github.com/joho/godotenv"
-  "os"
+	"BsonDB-API/routes"
+	"BsonDB-API/ssh"
+	"fmt"
 	"net/http"
-  "fmt"
-  "BsonDB-API/routes"
-  "BsonDB-API/ssh"
+	"os"
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
-
-var Client *vm.SSHClient
 
 func checkRequestSize(c *gin.Context) {
   const MaxRequestSize = 1048576
@@ -37,41 +35,46 @@ func CORSMiddleware() gin.HandlerFunc {
 }
 
 func CloseConnection(c *gin.Context) {
-  Client.CloseAllSessions()
-  Client.Open = false;
+  if c.GetHeader("Authorization") != os.Getenv("ADMIN_PASSWORD") {
+    c.JSON(http.StatusUnauthorized, 
+    gin.H{"error": "Unable to access this function"})
+    return
+  }
+  vm.Client.CloseAllSessions()
+  vm.Client.Open = false;
   c.JSON(http.StatusOK, gin.H{"message":"Connection to VM was closed"})
 }
 
-func Connect() {
-  config, error := vm.DefaultConfig()
-  if error != nil { fmt.Println("Error loading the config") }
+func Reconnect(c *gin.Context) {
+  if c.GetHeader("Authorization") != os.Getenv("ADMIN_PASSWORD") {
+    c.JSON(http.StatusUnauthorized, 
+    gin.H{"error": "Unable to access this function"})
+    return
+  }
 
-  Client, error = vm.NewSSHClient(config)
-  if error != nil { fmt.Println("Unable to create the client")}
+  err := Connect()
+  if err != nil {
+    c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to re-establish connection to VM"})
+    return
+  }
 
-  fmt.Println("The connection to the VM has been initialized")
+  vm.Client.Open = true;
+  c.JSON(http.StatusOK, gin.H{"message":"Connection to VM was re-established"})
 }
 
-func getDir(c *gin.Context) {
-
-  if !Client.Open {
-    c.JSON(http.StatusOK, gin.H{"message":"The database is closed at the moment"})
-    return
+func Connect() error {
+  config, error := vm.DefaultConfig()
+  if error != nil {
+    return fmt.Errorf("Error initializing the connection to the VM with the default configuration")
   }
 
-  session, error := Client.GetSession()
-  if error != nil { fmt.Println("Unable to get the session")}
-  defer Client.ReturnSession(session)
-
-  output, err := session.CombinedOutput("ls")
-  if err != nil {
-    c.JSON(http.StatusOK, gin.H{"error": err})
-    return
+  vm.Client, error = vm.NewSSHClient(config)
+  if error != nil { 
+    return fmt.Errorf("Error initializing the connection to the VM")
   }
 
-  outputStr := string(output)
-
-  c.JSON(http.StatusOK, gin.H{"Hello": outputStr})
+  fmt.Println("The connection to the VM has been initialized")
+  return nil
 }
 
 func main() {
@@ -85,15 +88,14 @@ func main() {
 
   apiGroup := router.Group("/api")
 
-  Connect() 
+  error := Connect() 
+  if error != nil { fmt.Println(error) }
 
   router.GET("/", route.Root)
 
-  router.GET("/getDir", getDir)
   router.GET("/CloseConnection", CloseConnection)
+  router.GET("/Reconnect", Reconnect)
 
-  router.POST("/admin", route.AdminData)
-  apiGroup.POST("/database", route.Readdb)
   apiGroup.POST("/database-names", route.GetDatabaseNames)
   apiGroup.POST("/table", route.GetTable)
   apiGroup.POST("/entry", route.GetEntry)
@@ -106,10 +108,7 @@ func main() {
   apiGroup.POST("/add-entry", checkRequestSize, route.AddEntry)
 
   apiGroup.POST("/migrate-tables", checkRequestSize, route.MigrateTables)
-
   apiGroup.PUT("/update-field", checkRequestSize, route.UpdateField)
-  
-  apiGroup.POST("/delete-table", route.DeleteTable)
   apiGroup.POST("/delete-entry", route.DeleteEntry)
 
   port := os.Getenv("PORT")

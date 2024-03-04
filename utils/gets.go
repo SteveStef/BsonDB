@@ -1,141 +1,79 @@
 package db
 import (
   "fmt"
-  "os"
-  "io"
   "go.mongodb.org/mongo-driver/bson"
+  "BsonDB-API/ssh"
+  "strings"
 )
-
-func GetAllDBs() (Accounts, error) {
-  var accounts Accounts
-  f, err := os.Open("./accounts/accounts.bson")
-  if err != nil {
-    return Accounts{}, err
-  }
-  defer f.Close()
-
-  fileData, err := io.ReadAll(f)
-  err = bson.Unmarshal(fileData, &accounts)
-  if err != nil {
-    return Accounts{}, fmt.Errorf("Error occurred during unmarshaling: %v", err)
-  }
-  
-  for i, account := range accounts.AccountData {
-    size, err := calculateDirSize("./storage/db_"+account.Database)
-
-    if err != nil {
-      continue
-    }
-    size += 4096
-
-    // updating the size of the database (just in case of a crash)
-    Mem.Data[account.Database] = size
-
-    accounts.AccountData[i].Size = fmt.Sprintf("%d", size)
-    accounts.AccountData[i].Size += " bytes"
-  }
-  return accounts, nil
-}
 
 func GetAllTblNames(dbId string) ([]string, error) {
   var dbs []string
   dbs = make([]string, 0)
 
-  data, err := os.ReadDir("./storage/db_"+dbId)
+  session, error := vm.Client.GetSession()
+  if error != nil {
+    return dbs, fmt.Errorf("Error occurred when creating the sessions: %v", error)
+  }
+  defer session.Close()
+
+  command := fmt.Sprintf("ls BsonDB/db_%s", dbId)
+  output, err := session.CombinedOutput(command)
   if err != nil {
-    return []string{}, fmt.Errorf("Database not found")
+    return dbs, fmt.Errorf("Error occurred while reading the file: %v", err)
+  }
+  if len(output) > 0 {
+    output = output[:len(output)-1]
   }
 
-  for _, file := range data {
-    if !file.IsDir() {
-      fileNameWithoutExt := file.Name()[:len(file.Name())-5]
-      dbs = append(dbs, fileNameWithoutExt)
-    }
+  dbs = strings.Split(string(output), "\n")
+  for i, db := range dbs {
+    dbs[i] = strings.TrimSuffix(db, ".bson")
   }
   return dbs, nil
 }
 
-func calculateDirSize(dirpath string) (int64, error) {
-  var dirsize int64
-  files, err := os.ReadDir(dirpath)
-  if err != nil {
-    return   0, err
-  }
-  for _, file := range files {
-    if file.IsDir() {
-      size, err := calculateDirSize(dirpath + "/" + file.Name())
-      if err != nil {
-        return 0, err
-      }
-      dirsize += size
-    } else {
-      info, err := file.Info()
-      if err != nil {
-        return 0, err
-      }
-      dirsize += info.Size()
-    }
-  }
-  return dirsize, nil
-}
-
-// reads th entire database
+// This function is not done
 func ReadBsonFile(directory string) (Model, error, int64) {
-
   model := Model{}
   tables := []Table{}
   size := int64(4096)
 
-  data, err := os.ReadDir("./storage/db_"+directory)
-  if err != nil {
-    return Model{}, err, 0
+  // read all the tables from the directory
+  // using cat command
+  session, error := vm.Client.GetSession()
+  if error != nil {
+    return model, fmt.Errorf("Error occurred when creating the sessions: %v", error), size
   }
-  for _, file := range data {
-    if file.IsDir() {
-      return model, fmt.Errorf("Directory found instead of file"), 0
-    }
+  defer session.Close()
 
-    file, err := os.Open("./storage/db_"+directory+"/"+file.Name())
-    if err != nil {
-      return model, err, 0
-    }
-    defer file.Close()
+  // I need all the file names 
+  // command := fmt.Sprintf("cat BsonDB/db_%s", directory)
 
-    bTable, err := io.ReadAll(file)
-    if err != nil {
-      return model, err, 0
-    }
-
-    size += int64(len(bTable))
-    var table Table
-    err = bson.Unmarshal(bTable, &table)
-    if err != nil {
-      return model, err, 0
-    }
-    tables = append(tables, table)
-  }
   model = Model{Tables: tables}
   return model, nil, size 
 }
 
 func GetTable(directoryId string, table string) ([]map[string]interface{}, error) {
-
-  filePath := fmt.Sprintf("./storage/db_%s/%s.bson", directoryId, table)
-  file, err := os.Open(filePath)
-  if err != nil {
-    return []map[string]interface{}{}, fmt.Errorf("Table not found") 
+  filePath := fmt.Sprintf("BsonDB/db_%s/%s.bson", directoryId, table)
+  session, error := vm.Client.GetSession()
+  if error != nil {
+    return []map[string]interface{}{},fmt.Errorf("Error occurred when creating the sessions: %v", error)
   }
-  defer file.Close()
+  defer session.Close()
 
-  bTable, err := io.ReadAll(file)
+  command := fmt.Sprintf("cat %s", filePath)
+  output, err := session.CombinedOutput(command)
   if err != nil {
-    return []map[string]interface{}{}, fmt.Errorf("Error occurred during reading")
+    return []map[string]interface{}{}, fmt.Errorf("Error occurred while reading the file: %v", err)
   }
-
+  if len(output) > 0 {
+    output = output[:len(output)-1]
+  }
   var tableData Table
-  err = bson.Unmarshal(bTable, &tableData)
+
+  err = bson.Unmarshal(output, &tableData)
   if err != nil {
-    return []map[string]interface{}{}, fmt.Errorf("Error occurred during unmarshaling")
+    return []map[string]interface{}{}, fmt.Errorf("Error occurred during unmarshaling %s", err)
   }
 
   entries := make([]map[string]interface{}, 0)
@@ -151,22 +89,26 @@ func GetTable(directoryId string, table string) ([]map[string]interface{}, error
 }
 
 func GetEntryFromTable(directoryId string, table string, entryId string) (map[string]interface{}, error) {
-  filePath := fmt.Sprintf("./storage/db_%s/%s.bson", directoryId, table)
-  file, err := os.Open(filePath)
-  if err != nil {
-    return map[string]interface{}{}, fmt.Errorf("Table not found")
+  filePath := fmt.Sprintf("BsonDB/db_%s/%s.bson", directoryId, table)
+  session, error := vm.Client.GetSession()
+  if error != nil {
+    return map[string]interface{}{},fmt.Errorf("Error occurred when creating the sessions: %v", error)
   }
-  defer file.Close()
+  defer session.Close()
 
-  bTable, err := io.ReadAll(file)
+  command := fmt.Sprintf("cat %s", filePath)
+  output, err := session.CombinedOutput(command)
   if err != nil {
-    return map[string]interface{}{}, fmt.Errorf("Error occurred during reading")
+    return map[string]interface{}{}, fmt.Errorf("Error occurred while reading the file: %v", err)
+  }
+  if len(output) > 0 {
+    output = output[:len(output)-1]
   }
 
   var tableData Table
-  err = bson.Unmarshal(bTable, &tableData)
+  err = bson.Unmarshal(output, &tableData)
   if err != nil {
-    return map[string]interface{}{}, fmt.Errorf("Error occurred during unmarshaling")
+    return map[string]interface{}{}, fmt.Errorf("Error occurred during unmarshaling %s", err)
   }
 
   if val, ok := tableData.Entries[entryId]; ok {
@@ -177,23 +119,26 @@ func GetEntryFromTable(directoryId string, table string, entryId string) (map[st
 }
 
 func GetFieldFromEntry(dbId string, table string, entryId string, field string) (interface{}, error) {
-
-  path := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
-  file, err := os.Open(path)
-  if err != nil {
-    return nil, fmt.Errorf("Table not found")
+  filePath := fmt.Sprintf("BsonDB/db_%s/%s.bson", dbId, table)
+  session, error := vm.Client.GetSession()
+  if error != nil {
+    return map[string]interface{}{},fmt.Errorf("Error occurred when creating the sessions: %v", error)
   }
-  defer file.Close()
+  defer session.Close()
 
-  bTable, err := io.ReadAll(file)
+  command := fmt.Sprintf("cat %s", filePath)
+  output, err := session.CombinedOutput(command)
   if err != nil {
-    return nil, fmt.Errorf("Error occurred during reading")
+    return map[string]interface{}{}, fmt.Errorf("Error occurred while reading the file: %v", err)
+  }
+  if len(output) > 0 {
+    output = output[:len(output)-1]
   }
 
   var tableData Table
-  err = bson.Unmarshal(bTable, &tableData)
+  err = bson.Unmarshal(output, &tableData)
   if err != nil {
-    return nil, fmt.Errorf("Error occurred during unmarshaling")
+    return map[string]interface{}{}, fmt.Errorf("Error occurred during unmarshaling %s", err)
   }
 
   if val, ok := tableData.Entries[entryId][field]; ok {
@@ -204,24 +149,26 @@ func GetFieldFromEntry(dbId string, table string, entryId string, field string) 
 }
 
 func GetEntriesByFieldValue(dbId string, table string, field string, value string) ([]map[string]interface{}, error) {
-
-  path := fmt.Sprintf("./storage/db_%s/%s.bson", dbId, table)
-  file, err := os.Open(path)
-  if err != nil {
-    return []map[string]interface{}{}, fmt.Errorf("Table not found")
+  filePath := fmt.Sprintf("BsonDB/db_%s/%s.bson", dbId, table)
+  session, error := vm.Client.GetSession()
+  if error != nil {
+    return []map[string]interface{}{},fmt.Errorf("Error occurred when creating the sessions: %v", error)
   }
-  defer file.Close()
+  defer session.Close()
 
-
-  bTable, err := io.ReadAll(file)
+  command := fmt.Sprintf("cat %s", filePath)
+  output, err := session.CombinedOutput(command)
   if err != nil {
-    return []map[string]interface{}{}, fmt.Errorf("Error occurred during reading")
+    return []map[string]interface{}{}, fmt.Errorf("Error occurred while reading the file: %v", err)
+  }
+  if len(output) > 0 {
+    output = output[:len(output)-1]
   }
 
   var tableData Table
-  err = bson.Unmarshal(bTable, &tableData)
+  err = bson.Unmarshal(output, &tableData)
   if err != nil {
-    return []map[string]interface{}{}, fmt.Errorf("Error occurred during unmarshaling")
+    return []map[string]interface{}{}, fmt.Errorf("Error occurred during unmarshaling %s", err)
   }
 
   entries := []map[string]interface{}{}

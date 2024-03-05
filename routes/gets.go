@@ -3,7 +3,6 @@ package route
 import (
   "github.com/gin-gonic/gin"
   "net/http"
-  //"os"
   "BsonDB-API/utils"
 )
 
@@ -32,23 +31,6 @@ func GetDatabaseNames(c *gin.Context) {
   c.JSON(http.StatusOK, tbls)
 }
 
-func Readdb(c *gin.Context) {
-  var body map[string]string
-  if err := c.ShouldBindJSON(&body); err != nil {
-    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-    return
-  }
-  if _, ok := body["databaseId"]; !ok {
-    c.JSON(http.StatusBadRequest, gin.H{"error": "databaseId is required"})
-    return
-  }
-  model, err, size := db.ReadBsonFile(body["databaseId"])
-  if err != nil {
-    c.JSON(http.StatusInternalServerError, gin.H{"error": "Database not found"})
-    return
-  }
-  c.JSON(http.StatusOK, gin.H{"model": model, "size": size})
-}
 
 func GetTable(c *gin.Context) {
   var body map[string]string
@@ -124,7 +106,7 @@ func GetField(c *gin.Context) {
 }
 
 func GetEntriesByFieldValue(c *gin.Context) {
-  var body map[string]string
+  var body map[string]interface{}
   if err := c.ShouldBindJSON(&body); err != nil {
     c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
     return
@@ -136,14 +118,10 @@ func GetEntriesByFieldValue(c *gin.Context) {
       return
     }
   }
-
-  entries, err := db.GetEntriesByFieldValue(body["databaseId"], body["table"], body["field"], body["value"])
+  entries, err := db.GetEntriesByFieldValue(body["databaseId"].(string), body["table"].(string), body["field"].(string), body["value"])
   if err != nil {
     c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
     return
   }
   c.JSON(http.StatusOK, entries)
 }
-
-
-

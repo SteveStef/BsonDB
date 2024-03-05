@@ -3,6 +3,7 @@ package main
 import (
 	"BsonDB-API/routes"
 	"BsonDB-API/ssh"
+  "BsonDB-API/file-manager"
 	"fmt"
 	"net/http"
 	"os"
@@ -51,13 +52,11 @@ func Reconnect(c *gin.Context) {
     gin.H{"error": "Unable to access this function"})
     return
   }
-
   err := Connect()
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to re-establish connection to VM"})
     return
   }
-
   vm.Client.Open = true;
   c.JSON(http.StatusOK, gin.H{"message":"Connection to VM was re-established"})
 }
@@ -67,15 +66,14 @@ func Connect() error {
   if error != nil {
     return fmt.Errorf("Error initializing the connection to the VM with the default configuration")
   }
-
   vm.Client, error = vm.NewSSHClient(config)
   if error != nil { 
     return fmt.Errorf("Error initializing the connection to the VM")
   }
-
   fmt.Println("The connection to the VM has been initialized")
   return nil
 }
+
 
 func main() {
   err := godotenv.Load()
@@ -89,6 +87,8 @@ func main() {
   apiGroup := router.Group("/api")
 
   error := Connect() 
+  mngr.FM = &mngr.FileManager{}
+
   if error != nil { fmt.Println(error) }
 
   router.GET("/", route.Root)
@@ -112,9 +112,7 @@ func main() {
   apiGroup.POST("/delete-entry", route.DeleteEntry)
 
   port := os.Getenv("PORT")
-  if port == "" {
-    port = "8080"
-  }
+  if port == "" { port = "8080" }
 
   fmt.Printf("Server started at %s\n", port)
   router.Run(":" + port)

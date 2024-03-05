@@ -9,6 +9,7 @@ import (
   "io"
   "syscall"
   "BsonDB-API/ssh"
+  "BsonDB-API/file-manager"
 )
 
 func AccountMiddleware(email string, code string) (string, error) {
@@ -56,7 +57,6 @@ func CheckIfAccountExists(email string) (string, error) {
   }
   defer file.Close()
 
-  //fileData, err := io.Read("./accounts/accounts.bson")
   bAccounts, err := io.ReadAll(file)
   if err != nil {
     return "", fmt.Errorf("Error occurred during reading file: %v", err)
@@ -84,10 +84,12 @@ func CreateDatabase(email string) (string, error) {
   var dbId string
   dbId = uuid.New().String()
 
+  /*
   err := AddAccount(email, dbId)
   if err != nil {
     return "", fmt.Errorf("Error occurred during adding account: %v", err)
   }
+  */
 
   var nameOfDb string = "db_"+dbId
   session, error := vm.Client.GetSession()
@@ -96,20 +98,9 @@ func CreateDatabase(email string) (string, error) {
   }
   defer session.Close()
 
-  command := fmt.Sprintf("mkdir BsonDB/%s", nameOfDb)
-  output, err := session.CombinedOutput(command)
-  if err != nil {
-    return "", err
-  }
-
-  outputStr := string(output)
-  if len(outputStr) > 0 {
-    return "", fmt.Errorf("There was an error when creating the database: %s", outputStr)
-  }
-  
-  Mem.mu.Lock()
-  Mem.Data[dbId] = 4096
-  Mem.mu.Unlock()
+  path := "BsonDB/" + nameOfDb
+  err := session.Mkdir(path)
+  if err != nil { return "", fmt.Errorf("Error occurred during creating directory: %v", err) }
 
   return dbId, nil
 }
@@ -202,7 +193,6 @@ func ValidateTable(table *Table) error {
       return fmt.Errorf("Required field not in entry template: " + requiredField)
     }
   }
-
   return nil;
 }
 
@@ -227,76 +217,95 @@ func MigrateTables(dbId string, tables []Table) error {
     }(table)
   }
   wg.Wait()
+
   if err := DeleteTablesNotInList(dbId, tblNames); err != nil {
     errs = append(errs, fmt.Errorf("Error occurred during removing unwanted tables: %v", err))
   }
   if len(errs) >  0 {
     return errs[0]
   }
+
   return nil
 }
 
 func DeleteTablesNotInList(dbId string, tblNames []string) error {
-
   dirPath := "BsonDB/db_" + dbId
-  session, error := vm.Client.GetSession()
-  if error != nil {
-    return fmt.Errorf("Error occurred when creating the sessions: %v", error)
+  session, err := vm.Client.GetSession()
+  if err != nil {
+    return fmt.Errorf("Error occurred when creating the sessions: %v", err)
   }
   defer session.Close()
 
-  // finish the command
-  fileNames := ""
-  for idx, name := range tblNames {
-    if idx == 0 {
-      fileNames += "-name '"+ name + ".bson' "
-    } else {
-      fileNames += "-o -name '"+ name + ".bson' "
+  // Convert tblNames to a map for faster lookup
+  tblNamesMap := make(map[string]bool)
+  for _, tblName := range tblNames {
+    tblNamesMap[tblName] = true
+  }
+
+  files, err := session.ReadDir(dirPath)
+  if err != nil {
+    return fmt.Errorf("Error occurred during reading directory: %v", err)
+  }
+
+  // delete all directories that are not in the list of tblNames
+  deleteDirs := ""
+  for _, file := range files {
+    if _, ok := tblNamesMap[file.Name()]; !ok {
+      deleteDirs += dirPath + "/" + file.Name() + " "
     }
   }
 
-  var command string
-  if fileNames == "" {
-    command = fmt.Sprintf(`rm -r %s/*`, dirPath)
-  } else {
-    command = fmt.Sprintf(`cd %s && find . -type f ! \( %s\) -exec rm -f {} +`, dirPath, fileNames)
-  }
-  
-  if err := session.Run(command); err != nil {
-    return fmt.Errorf("Failed to run command: %v", err)
-  }
+  termSession, err := vm.Client.GetTermSession()
+  if err != nil { return fmt.Errorf("Error occurred during creating the sessions: %v", err) }
+  defer termSession.Close()
+  command := fmt.Sprintf("rm -rf %s", deleteDirs)
+  err = termSession.Run(command)
+  if err != nil { return fmt.Errorf("Error occurred during running command: %v", err) }
+
   return nil
 }
 
 func AddTableToDb(directory string, table Table) error {
+	bsonData, err := bson.Marshal(table)
+	if err != nil {
+		return fmt.Errorf("Error occurred during marshaling: %v", err)
+	}
 
-  bsonData, err := bson.Marshal(table)
-  if err != nil { return fmt.Errorf("Error occurred during marshaling: %v", err) }
-  path := fmt.Sprintf("BsonDB/db_%s/%s.bson", directory, table.Name)
+	filePath := fmt.Sprintf("BsonDB/db_%s/%s/%s.bson", directory, table.Name, table.Name)
 
-  session, error := vm.Client.GetSession()
-  if error != nil {
-    return fmt.Errorf("Error occurred when creating the sessions: %v", error)
+	session, err := vm.Client.GetSession()
+	if err != nil {
+		return fmt.Errorf("Error occurred when creating the sessions: %v", err)
+	}
+	defer session.Close()
+
+	for !mngr.FM.LockFile(filePath) {
+		mngr.FM.WaitForFileUnlock(filePath)
+	}
+	defer mngr.FM.UnlockFile(filePath)
+
+	// Check if the directory exists, if not, create it
+	dirPath := fmt.Sprintf("BsonDB/db_%s/%s", directory, table.Name)
+	_, err = session.Stat(dirPath)
+	if err != nil {
+		// Directory does not exist, create it
+		err = session.Mkdir(dirPath)
+		if err != nil {
+			return fmt.Errorf("Error creating directory: %v", err)
+		}
   }
-  defer session.Close()
 
-  go func() {
-    w, _ := session.StdinPipe()
-    defer w.Close()
-    fmt.Fprintf(w, "flock -w 10 %s -c 'cat > %s'\n", path, path)
-    w.Write(bsonData)
-    fmt.Fprint(w, "\x00")
-  }()
+	// Create a new file in the directory
+	file, err := session.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("Error creating file: %v", err)
+	}
+	defer file.Close()
 
-  if err := session.Run("/bin/bash"); err != nil {
-    return fmt.Errorf("Failed to run command: %v", err)
-  }
+	// Write the BSON data to the file
+	if _, err := file.Write(bsonData); err != nil {
+		return fmt.Errorf("Error writing to file: %v", err)
+	}
 
-  size := int64(len(bsonData))
-
-  Mem.mu.Lock()
-  Mem.Data[directory] += size
-  Mem.mu.Unlock()
-
-  return nil
+	return nil
 }

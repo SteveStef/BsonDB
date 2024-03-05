@@ -1,16 +1,8 @@
 package db
 import (
   "reflect"
-  "sync"
+  "strings"
 )
-
-
-type MemCache struct {
-  Data map[string]int64
-  mu sync.RWMutex
-}
-
-var Mem = MemCache{Data: make(map[string]int64), mu: sync.RWMutex{}}
 
 type EmailResponse struct {
 	Error   bool   `json:"error"`
@@ -35,13 +27,34 @@ type Table struct {
   Entries map[string]map[string]interface{}`bson:"entries"`
 }
 
-type Model struct {
-  Tables []Table `bson:"tables"`
+var SpecialCharactersToLetters map[string]string
+func init() {
+  SpecialCharactersToLetters = map[string]string{
+    "\\": "backslash",
+    "/": "slash",
+    ":": "colon",
+    "*": "asterisk",
+    "?": "questionmark",
+    "\"": "quote",
+    "<": "lessthan",
+    ">": "greaterthan",
+    "|": "pipe",
+    ".": "period",
+  }
 }
 
-type AdminData struct {
-  UserAccounts []Account
-  Size string
+func ValidateIdentifier(identifier string) string {
+  for k, v := range SpecialCharactersToLetters {
+    identifier = strings.ReplaceAll(identifier, k, v)
+  }
+  return identifier
+}
+
+type TableDefinition struct {
+  Name string
+  Identifier string
+  Requires []string
+  EntryTemplate map[string]string
 }
 
 func DetermindType(i interface{}) string {

@@ -102,11 +102,7 @@ func AddEntry(c *gin.Context) {
     c.JSON(http.StatusBadRequest, gin.H{"error": "entry is required"})
     return
   }
-  if db.Mem.Data[dbId] > MaxSizeOfDB {
-    c.JSON(http.StatusBadRequest, gin.H{"error": "Your database is full"})
-    return
-  }
-  err := db.AddEntryToTable(dbId, table, entry)
+  err := db.AddEntry(dbId, table, entry)
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
     return

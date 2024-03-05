@@ -7,6 +7,7 @@ import (
 	"golang.org/x/crypto/ssh"
   "net"
   "encoding/base64"
+  "github.com/pkg/sftp"
 )
 
 type SSHClient struct {
@@ -77,8 +78,16 @@ func NewSSHClient(config *ssh.ClientConfig) (*SSHClient, error) {
   }, nil
 }
 
-func (c *SSHClient) GetSession() (*ssh.Session, error) {
-  return c.client.NewSession() 
+func (c *SSHClient) GetSession() (*sftp.Client, error) {
+  session, err := sftp.NewClient(c.client)
+  if err != nil { return nil, err }
+  return session, nil
+}
+
+func (c *SSHClient) GetTermSession() (*ssh.Session, error) {
+  session, err := c.client.NewSession()
+  if err != nil { return nil, err }
+  return session, nil
 }
 
 func (c *SSHClient) CloseAllSessions() {

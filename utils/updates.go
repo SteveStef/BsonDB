@@ -5,6 +5,7 @@ import (
   "BsonDB-API/file-manager"
   "BsonDB-API/ssh"
   "github.com/pkg/sftp"
+  "sync"
   "fmt"
   "io"
   "os"
@@ -77,11 +78,9 @@ func AddEntry(dbId string, table string, entry map[string]interface{}) error {
 }
 
 
-
-
 func UpdateEntry(dbId string, table string, entryId string, obj map[string]interface{}) error {
   originalEntryId := entryId
-  //entryId = ValidateIdentifier(entryId)
+  entryId = ValidateIdentifier(entryId)
   path := fmt.Sprintf("BsonDB/db_%s/%s/%s.bson", dbId, table, entryId)
 
   session, err := vm.SSHHandler.GetSession()
@@ -93,31 +92,65 @@ func UpdateEntry(dbId string, table string, entryId string, obj map[string]inter
   }
   defer mngr.FM.UnlockFile(path)
 
-  /*tableDefinitionBytes, err := readBsonFile(session, fmt.Sprintf("BsonDB/db_%s/%s/%s.bson", dbId, table, table))
-  if err != nil { return fmt.Errorf("%v", err) }
+
   var tableDefinition TableDefinition
-  err = bson.Unmarshal(tableDefinitionBytes, &tableDefinition)
-  if err != nil { return fmt.Errorf("Error occurred during unmarshaling") }*/
-
-  file, err := session.OpenFile(path, os.O_RDWR)
-  if err != nil { return fmt.Errorf("No entry with identifier of %s", originalEntryId) }
-  defer file.Close()
-
-  output, err := io.ReadAll(file)
-  if err != nil { return fmt.Errorf("%s",err) }
-  
   var entryData map[string]interface{}
-  err = bson.Unmarshal(output, &entryData)
-  if err != nil { return fmt.Errorf("Error occurred during unmarshaling") }
+  var tableDefinitionErr, entryDataErr error
+
+  var wg sync.WaitGroup
+  wg.Add(2)
+
+  go func() {
+    defer wg.Done()
+    tableDefinitionBytes, err := readBsonFile(session, fmt.Sprintf("BsonDB/db_%s/%s/%s.bson", dbId, table, table))
+    if err != nil {
+      tableDefinitionErr = fmt.Errorf("%v", err)
+      return
+    }
+    err = bson.Unmarshal(tableDefinitionBytes, &tableDefinition)
+    if err != nil {
+      tableDefinitionErr = fmt.Errorf("Error occurred during unmarshaling")
+    }
+  }()
+
+  go func() {
+    defer wg.Done()
+    file, err := session.OpenFile(path, os.O_RDWR)
+    if err != nil {
+      entryDataErr = fmt.Errorf("No entry with identifier of %s", originalEntryId)
+      return
+    }
+    defer file.Close()
+
+    output, err := io.ReadAll(file)
+    if err != nil {
+      entryDataErr = fmt.Errorf("%s", err)
+      return
+    }
+
+    err = bson.Unmarshal(output, &entryData)
+    if err != nil {
+      entryDataErr = fmt.Errorf("Error occurred during unmarshaling")
+    }
+  }()
+
+  wg.Wait()
+
+  if tableDefinitionErr != nil {
+    return tableDefinitionErr
+  }
+
+  if entryDataErr != nil {
+    return entryDataErr
+  }
 
   // Find a way to check if the identifier is being changed
   for key, value := range obj {
-    // if key == tableDefinition.Identifier { return fmt.Errorf("You connot change the identifier of the entry") }
+    if key == tableDefinition.Identifier { return fmt.Errorf("You connot change the identifier of the entry") }
     if _, ok := entryData[key]; ok {
       t := DetermindType(value)
-      ogType := DetermindType(entryData[key])
-      if t != ogType { //if t != tableDefinition.EntryTemplate[key] 
-        return fmt.Errorf("Unexpected type on field %s, expected %s, got %s", key, /*tableDefinition.EntryTemplate[key]*/ogType, t)
+      if t != tableDefinition.EntryTemplate[key] {
+        return fmt.Errorf("Unexpected type on field %s, expected %s, got %s", key, tableDefinition.EntryTemplate[key], t)
       }
       entryData[key] = value
     } else {
@@ -128,16 +161,14 @@ func UpdateEntry(dbId string, table string, entryId string, obj map[string]inter
   bsonData, err := bson.Marshal(entryData)
   if err != nil { return fmt.Errorf("Error occurred during marshaling") }
 
-  file, err = session.Create(path)
+  file, err := session.Create(path)
   if err != nil { return fmt.Errorf("Error occurred during creating the file: %v", err) }
 
   if _, err := file.Write(bsonData); err != nil {
     return fmt.Errorf("Error occurred while writing the file: %v", err)
   }
-
   return nil
 }
-
 
 
 func readBsonFile(session *sftp.Client, path string) ([]byte, error) {

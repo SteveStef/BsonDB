@@ -11,12 +11,8 @@ import (
 // 2 MB
 var MaxSizeOfDB = int64(2 * 1024 * 1024)
 
+// No longer in use 
 func Createdb(c *gin.Context) {
-  if c.GetHeader("Authorization") != os.Getenv("ADMIN_PASSWORD") {
-    c.JSON(http.StatusUnauthorized, 
-    gin.H{"error": "Unable to create database, Please go to the BsonDB website the create one."})
-    return
-  }
 
   if c.GetHeader("Origin") != os.Getenv("ALLOWED_ORIGIN") {
     c.JSON(http.StatusUnauthorized,
@@ -35,49 +31,14 @@ func Createdb(c *gin.Context) {
     return
   }
 
-  dbId, err := db.CreateDatabase(req["email"])
+  err := db.CreateDatabase(req["email"])
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
     return
   }
 
-  c.JSON(http.StatusOK, gin.H{"id": dbId})
+  c.JSON(http.StatusOK, gin.H{"message": "Database created"})
 }
-
-func AccountMiddleware(c *gin.Context) {
-  if c.GetHeader("Authorization") != os.Getenv("ADMIN_PASSWORD") {
-    c.JSON(http.StatusUnauthorized, 
-    gin.H{"error": "Unable to access this function, Please go to the BsonDB website the create one."})
-    return
-  }
-  if c.GetHeader("Origin") != os.Getenv("ALLOWED_ORIGIN") {
-    c.JSON(http.StatusUnauthorized,
-    gin.H{"error": "Unauthorized, go to the BsobDB website to create a database."})
-    return
-  }
-  var req map[string]string
-  if err := c.ShouldBindJSON(&req); err != nil {
-    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-    return
-  }
-  if _, ok := req["email"]; !ok {
-    c.JSON(http.StatusBadRequest, gin.H{"error": "Email is required"})
-    return
-  }
-  if _, ok := req["code"]; !ok {
-    c.JSON(http.StatusBadRequest, gin.H{"error": "Code is required"})
-    return
-  }
-
-  dbId, err := db.AccountMiddleware(req["email"], req["code"])
-  if err != nil {
-    c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-    return
-  }
-
-  c.JSON(http.StatusOK, gin.H{"id": dbId})
-}
-
 
 // Add a field to a table
 func AddEntry(c *gin.Context) {
@@ -111,6 +72,8 @@ func AddEntry(c *gin.Context) {
 }
 
 func DeleteDatabase(c *gin.Context) {
+  token := c.GetHeader("Authorization")
+
   var body map[string]string
   if err := c.ShouldBindJSON(&body); err != nil {
     c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -129,20 +92,19 @@ func DeleteDatabase(c *gin.Context) {
     return
   }
 
-  auhtorization := c.GetHeader("Authorization")
-  if auhtorization != os.Getenv("ADMIN_PASSWORD") {
-    c.JSON(http.StatusUnauthorized, 
-      gin.H{"error": "Unauthorized, go to the BsobDB website to delete a database."})
+  storedEmail, storedDBId, err := db.FetchLoggedInStatus(token)
+
+  if err != nil { 
+    c.JSON(http.StatusInternalServerError, gin.H{"error": "User is not logged in"})
     return
   }
 
-  if c.GetHeader("Origin") != os.Getenv("ALLOWED_ORIGIN") {
-    c.JSON(http.StatusUnauthorized, 
-      gin.H{"error": "Unauthorized, go to the BsobDB website to delete a database."})
+  if storedEmail != email || storedDBId != dbId {
+    c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized, please login again"})
     return
   }
 
-  err := db.DeleteBsonFile(dbId, email)
+  err = db.DeleteBsonFile(dbId, email)
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
     return

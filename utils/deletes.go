@@ -16,11 +16,11 @@ func DeleteEntryFromTable(dbId string, table string, entryId string) error {
   }
 
   filePath := fmt.Sprintf("BsonDB/db_%s/%s/%s.bson", dbId, table, entryId)
-  session, error := vm.Client.GetSession()
+  session, error := vm.SSHHandler.GetSession()
   if error != nil {
     return fmt.Errorf("Error occurred when creating the sessions: %v", error)
   }
-  defer session.Close()
+  defer vm.SSHHandler.ReturnSession(session)
 
   for !mngr.FM.LockFile(filePath) {
     mngr.FM.WaitForFileUnlock(filePath)
@@ -42,13 +42,15 @@ func DeleteBsonFile(dbId string, email string) error {
     return fmt.Errorf("Error occurred during deleting account")
   }
 
-  session, err := vm.Client.GetSession()
-  if err != nil { return fmt.Errorf("Error occurred when creating the sessions: %v", err) }
-  defer session.Close()
+  filePath := fmt.Sprintf("BsonDB/db_%s", dbId)
+  termSession, err := vm.SSHHandler.GetTermSession()
+  defer vm.SSHHandler.ReturnTermSession(termSession)
 
-  path := fmt.Sprintf("BsonDB/db_%s", dbId)
-  err = session.Remove(path)
-  if err != nil { return fmt.Errorf("Error occurred during removing directory: %v", err) }
+  command := fmt.Sprintf("rm -rf %s", filePath)
+  err = termSession.Run(command)
+  if err != nil { 
+    return fmt.Errorf("Error occurred during deleting the database: %v", err) 
+  }
 
   return nil
 }

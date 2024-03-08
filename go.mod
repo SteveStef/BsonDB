@@ -8,7 +8,8 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/pkg/sftp v1.13.6
 	go.mongodb.org/mongo-driver v1.13.1
-	golang.org/x/crypto v0.20.0
+	golang.org/x/crypto v0.21.0
+	github.com/desops/sshpool v0.0.8 
 )
 
 require (
@@ -32,6 +33,7 @@ require (
 	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.11 // indirect
+	github.com/zekroTJA/timedmap v1.5.2 // indirect
 	golang.org/x/arch v0.3.0 // indirect
 	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/sys v0.18.0 // indirect

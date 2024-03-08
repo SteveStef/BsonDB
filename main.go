@@ -1,15 +1,18 @@
 package main
 
 import (
-	"BsonDB-API/routes"
 	"BsonDB-API/ssh"
+	"BsonDB-API/routes"
   "BsonDB-API/file-manager"
 	"fmt"
 	"net/http"
 	"os"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+  "go.mongodb.org/mongo-driver/bson"
+  "BsonDB-API/utils"
 )
+
 
 func checkRequestSize(c *gin.Context) {
   const MaxRequestSize = 1048576
@@ -41,9 +44,10 @@ func CloseConnection(c *gin.Context) {
     gin.H{"error": "Unable to access this function"})
     return
   }
-  vm.Client.CloseAllSessions()
-  vm.Client.Open = false;
-  c.JSON(http.StatusOK, gin.H{"message":"Connection to VM was closed"})
+
+  vm.SSHHandler.CloseAllSessions()
+  vm.SSHHandler.Open = false;
+  c.JSON(http.StatusOK, gin.H{"message":"Connection to database was closed by admin"})
 }
 
 func Reconnect(c *gin.Context) {
@@ -52,12 +56,20 @@ func Reconnect(c *gin.Context) {
     gin.H{"error": "Unable to access this function"})
     return
   }
+
+  if vm.SSHHandler.Open {
+    c.JSON(http.StatusOK, gin.H{"message":"Connection to VM is already open"})
+    return
+  }
+
   err := Connect()
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to re-establish connection to VM"})
     return
   }
-  vm.Client.Open = true;
+
+  vm.SSHHandler.FillSessionPool()
+  vm.SSHHandler.Open = true;
   c.JSON(http.StatusOK, gin.H{"message":"Connection to VM was re-established"})
 }
 
@@ -66,14 +78,30 @@ func Connect() error {
   if error != nil {
     return fmt.Errorf("Error initializing the connection to the VM with the default configuration")
   }
-  vm.Client, error = vm.NewSSHClient(config)
+  vm.SSHHandler, error = vm.NewSSHHandler(config)
   if error != nil { 
     return fmt.Errorf("Error initializing the connection to the VM")
   }
   fmt.Println("The connection to the VM has been initialized")
+
+  vm.SSHHandler.FillSessionPool()
   return nil
 }
 
+func CheckConnectionMiddleware() gin.HandlerFunc {
+  return func(c *gin.Context) {
+    if c.Request.URL.Path == "/Reconnect" {
+      c.Next()
+      return
+    }
+    if !vm.SSHHandler.Open {
+      c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Connection to VM is closed"})
+      c.Abort()
+      return
+    }
+    c.Next()
+  }
+}
 
 func main() {
   err := godotenv.Load()
@@ -83,12 +111,12 @@ func main() {
 
   router.SetTrustedProxies(nil)
   router.Use(CORSMiddleware())
+  router.Use(CheckConnectionMiddleware())
 
   apiGroup := router.Group("/api")
 
   error := Connect() 
   mngr.FM = &mngr.FileManager{}
-
   if error != nil { fmt.Println(error) }
 
   router.GET("/", route.Root)
@@ -102,8 +130,12 @@ func main() {
   apiGroup.POST("/field", route.GetField)
   apiGroup.POST("/entries", route.GetEntriesByFieldValue)
 
-  apiGroup.POST("/check-account", route.AccountMiddleware)
-  apiGroup.POST("/createdb", route.Createdb)
+  apiGroup.POST("/account-signup", route.Signup)
+  apiGroup.POST("/account-login", route.Login)
+  apiGroup.POST("/account-verify", route.VerifyAccount)
+  apiGroup.POST("/account-sendVerificationCode", route.SendVerificationCode)
+  apiGroup.GET("/account-FetchLoggedInStatus", route.FetchLoggedInStatus)
+
   apiGroup.POST("/deletedb", route.DeleteDatabase)
   apiGroup.POST("/add-entry", checkRequestSize, route.AddEntry)
 
@@ -116,4 +148,32 @@ func main() {
 
   fmt.Printf("Server started at %s\n", port)
   router.Run(":" + port)
+}
+
+func initF() {
+  var accounts db.DBAccounts
+  accounts.Accounts = []db.DBAccount{}
+  doc := bson.M{"accounts": accounts.Accounts}
+  data, err := bson.Marshal(doc)
+  if err != nil {
+    return
+  }
+  session, err := vm.SSHHandler.GetSession()
+  if err != nil {
+    return
+  }
+  defer session.Close()
+  path := fmt.Sprintf("BsonDB/Accounts.bson")
+  file, err := session.OpenFile(path, os.O_CREATE|os.O_RDWR)
+  if err != nil {
+    return
+  }
+  defer file.Close()
+
+  file.Truncate(0)
+  file.Seek(0, 0)
+  file.Write(data)
+  file.Sync()
+
+  return
 }

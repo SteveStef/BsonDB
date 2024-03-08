@@ -57,6 +57,16 @@ type TableDefinition struct {
   EntryTemplate map[string]string
 }
 
+type DBAccount struct {
+  Email string
+  Password string
+  DatabaseId string
+}
+
+type DBAccounts struct {
+  Accounts []DBAccount
+}
+
 func DetermindType(i interface{}) string {
 	var typestr string
 	switch reflect.TypeOf(i).Kind() {

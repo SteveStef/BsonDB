@@ -4,6 +4,7 @@ import (
   "go.mongodb.org/mongo-driver/bson"
   "BsonDB-API/file-manager"
   "BsonDB-API/ssh"
+  "github.com/pkg/sftp"
   "fmt"
   "io"
   "os"
@@ -11,11 +12,11 @@ import (
 
 func AddEntry(dbId string, table string, entry map[string]interface{}) error {
   pathToTemplate := fmt.Sprintf("BsonDB/db_%s/%s/%s.bson", dbId, table, table)
-  session, err := vm.Client.GetSession()
+  session, err := vm.SSHHandler.GetSession()
   if err != nil { return fmt.Errorf("Error occurred when creating the sessions1: %v", err) }
-  defer session.Close()
+  defer vm.SSHHandler.ReturnSession(session)
 
-  tblDefineBson, err := readBsonFile(pathToTemplate)
+  tblDefineBson, err := readBsonFile(session, pathToTemplate)
   if err != nil { return fmt.Errorf("Error occurred while reading the file: %v", err) }
 
   var tableDefinition TableDefinition
@@ -86,16 +87,16 @@ func UpdateEntry(dbId string, table string, entryId string, obj map[string]inter
   entryId = ValidateIdentifier(entryId)
   path := fmt.Sprintf("BsonDB/db_%s/%s/%s.bson", dbId, table, entryId)
 
-  session, err := vm.Client.GetSession()
+  session, err := vm.SSHHandler.GetSession()
   if err != nil { return fmt.Errorf("Error occurred when creating the sessions: %v", err) }
-  defer session.Close()
+  defer vm.SSHHandler.ReturnSession(session)
 
   for !mngr.FM.LockFile(path) {
     mngr.FM.WaitForFileUnlock(path)
   }
   defer mngr.FM.UnlockFile(path)
 
-  tableDefinitionBytes, err := readBsonFile(fmt.Sprintf("BsonDB/db_%s/%s/%s.bson", dbId, table, table))
+  tableDefinitionBytes, err := readBsonFile(session, fmt.Sprintf("BsonDB/db_%s/%s/%s.bson", dbId, table, table))
   if err != nil { return fmt.Errorf("%v", err) }
   var tableDefinition TableDefinition
   err = bson.Unmarshal(tableDefinitionBytes, &tableDefinition)
@@ -139,11 +140,7 @@ func UpdateEntry(dbId string, table string, entryId string, obj map[string]inter
   return nil
 }
 
-func readBsonFile(path string) ([]byte, error) {
-  session, err := vm.Client.GetSession()
-  if err != nil { return nil, fmt.Errorf("Error occurred when creating the sessions: %v", err) }
-  defer session.Close()
-
+func readBsonFile(session *sftp.Client, path string) ([]byte, error) {
   file, err := session.Open(path)
   if err != nil { return nil, fmt.Errorf("Invalid table name, table does not exist") }
   defer file.Close()

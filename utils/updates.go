@@ -128,17 +128,13 @@ func UpdateEntry(dbId string, table string, entryId string, obj map[string]inter
   bsonData, err := bson.Marshal(entryData)
   if err != nil { return fmt.Errorf("Error occurred during marshaling") }
 
-  if err := file.Truncate(0); err != nil {
-    return fmt.Errorf("Error occurred while truncating the file: %v", err)
-  }
-
-  if _, err := file.Seek(0, 0); err != nil {
-    return fmt.Errorf("Error occurred while seeking the file: %v", err)
-  }
+  file, err = session.Create(path)
+  if err != nil { return fmt.Errorf("Error occurred during creating the file: %v", err) }
 
   if _, err := file.Write(bsonData); err != nil {
     return fmt.Errorf("Error occurred while writing the file: %v", err)
   }
+
   return nil
 }
 

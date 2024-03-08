@@ -44,16 +44,19 @@ func ValidateTable(table *Table) error {
 
 // ================== TABLE MIGRATION ==================
 func MigrateTables(dbId string, tables []Table) error {
-  var tblNames []string
   var errs []error
   var wg sync.WaitGroup
+
+  if err := DeleteAllTables(dbId); err != nil {
+    errs = append(errs, fmt.Errorf("Error occurred during removing unwanted tables: %v", err))
+  }
+
   wg.Add(len(tables))
   for _, table := range tables {
     err := ValidateTable(&table)
     if err != nil {
       return fmt.Errorf("Error occurred during validating table: %v", err)
     }
-    tblNames = append(tblNames, table.Name)
     go func(table Table) {
       defer wg.Done()
       if err := AddTableToDb(dbId, table); err != nil {
@@ -63,17 +66,13 @@ func MigrateTables(dbId string, tables []Table) error {
   }
   wg.Wait()
 
-  if err := DeleteTablesNotInList(dbId, tblNames); err != nil {
-    errs = append(errs, fmt.Errorf("Error occurred during removing unwanted tables: %v", err))
-  }
   if len(errs) >  0 {
     return errs[0]
   }
-
   return nil
 }
 
-func DeleteTablesNotInList(dbId string, tblNames []string) error {
+func DeleteAllTables(dbId string) error {
   dirPath := "BsonDB/db_" + dbId
   session, err := vm.SSHHandler.GetSession()
   if err != nil {
@@ -82,10 +81,10 @@ func DeleteTablesNotInList(dbId string, tblNames []string) error {
   defer vm.SSHHandler.ReturnSession(session)
 
   // Convert tblNames to a map for faster lookup
-  tblNamesMap := make(map[string]bool)
+/*tblNamesMap := make(map[string]bool)
   for _, tblName := range tblNames {
     tblNamesMap[tblName] = true
-  }
+  }*/
 
   files, err := session.ReadDir(dirPath)
   if err != nil {
@@ -95,9 +94,7 @@ func DeleteTablesNotInList(dbId string, tblNames []string) error {
   // delete all directories that are not in the list of tblNames
   deleteDirs := ""
   for _, file := range files {
-    if _, ok := tblNamesMap[file.Name()]; !ok {
-      deleteDirs += dirPath + "/" + file.Name() + " "
-    }
+    deleteDirs += dirPath + "/" + file.Name() + " "
   }
 
   termSession, err := vm.SSHHandler.GetTermSession()

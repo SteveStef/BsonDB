@@ -73,11 +73,6 @@ func AddEntry(dbId string, table string, entry map[string]interface{}) error {
   if _, err := file.Write(bsonData); err != nil {
     return fmt.Errorf("Error occurred while writing the file: %v", err)
   }
-
-  if err := file.Sync(); err != nil {
-    return fmt.Errorf("Error occurred while syncing the file: %v", err)
-  }
-
   return nil
 }
 
@@ -104,7 +99,7 @@ func UpdateEntry(dbId string, table string, entryId string, obj map[string]inter
   err = bson.Unmarshal(tableDefinitionBytes, &tableDefinition)
   if err != nil { return fmt.Errorf("Error occurred during unmarshaling") }*/
 
-  file, err := session.OpenFile(path, os.O_RDWR | os.O_TRUNC)
+  file, err := session.OpenFile(path, os.O_RDWR)
   if err != nil { return fmt.Errorf("No entry with identifier of %s", originalEntryId) }
   defer file.Close()
 
@@ -116,7 +111,6 @@ func UpdateEntry(dbId string, table string, entryId string, obj map[string]inter
   if err != nil { return fmt.Errorf("Error occurred during unmarshaling") }
 
   // Find a way to check if the identifier is being changed
-
   for key, value := range obj {
     // if key == tableDefinition.Identifier { return fmt.Errorf("You connot change the identifier of the entry") }
     if _, ok := entryData[key]; ok {
@@ -133,10 +127,18 @@ func UpdateEntry(dbId string, table string, entryId string, obj map[string]inter
 
   bsonData, err := bson.Marshal(entryData)
   if err != nil { return fmt.Errorf("Error occurred during marshaling") }
+
+  if err := file.Truncate(0); err != nil {
+    return fmt.Errorf("Error occurred while truncating the file: %v", err)
+  }
+
+  if _, err := file.Seek(0, 0); err != nil {
+    return fmt.Errorf("Error occurred while seeking the file: %v", err)
+  }
+
   if _, err := file.Write(bsonData); err != nil {
     return fmt.Errorf("Error occurred while writing the file: %v", err)
   }
-
   return nil
 }
 

@@ -13,7 +13,6 @@ import (
   "BsonDB-API/utils"
 )
 
-
 func checkRequestSize(c *gin.Context) {
   const MaxRequestSize = 1048576
   if c.Request.ContentLength > MaxRequestSize {

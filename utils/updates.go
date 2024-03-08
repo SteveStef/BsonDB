@@ -81,7 +81,7 @@ func AddEntry(dbId string, table string, entry map[string]interface{}) error {
 
 func UpdateEntry(dbId string, table string, entryId string, obj map[string]interface{}) error {
   originalEntryId := entryId
-  entryId = ValidateIdentifier(entryId)
+  //entryId = ValidateIdentifier(entryId)
   path := fmt.Sprintf("BsonDB/db_%s/%s/%s.bson", dbId, table, entryId)
 
   session, err := vm.SSHHandler.GetSession()
@@ -137,8 +137,6 @@ func UpdateEntry(dbId string, table string, entryId string, obj map[string]inter
 
   return nil
 }
-
-
 
 
 

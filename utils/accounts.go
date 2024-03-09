@@ -7,6 +7,7 @@ import (
   "github.com/zekroTJA/timedmap"
   "BsonDB-API/file-manager"
   "github.com/pkg/sftp"
+  "golang.org/x/crypto/bcrypt"
   "strings"
   "time"
   "fmt"
@@ -42,8 +43,8 @@ func Login(email string, password string) (string, string, error) {
 
   account, err := exists(session, email)
   if err != nil { return "", "", err }
-  if account.Password == password {
-    token := uuid.New().String()
+  if CheckPasswordHash(password, account.Password) {
+    token := uuid.New().String() + uuid.New().String()
     Tokens.Set(token, fmt.Sprintf("%s-%s",email,account.DatabaseId), 60 * time.Minute)
     return account.DatabaseId, token, nil
   }
@@ -84,7 +85,11 @@ func Signup(email string, password string) (string, string, error) {
   if err != nil { return "", "", fmt.Errorf("Error occurred during unmarshalling: %v", err)}
 
   databaseId := uuid.New().String()
-  newAccount := DBAccount{Email: email, Password: password, DatabaseId: databaseId}
+
+  hashedPassword, err := HashPassword(password)
+  if err != nil { return "", "", fmt.Errorf("Error occurred during hashing: %v", err)}
+
+  newAccount := DBAccount{Email: email, Password: hashedPassword, DatabaseId: databaseId}
   accounts.Accounts = append(accounts.Accounts, newAccount)
 
   newAccountBytes, err := bson.Marshal(accounts)
@@ -98,7 +103,7 @@ func Signup(email string, password string) (string, string, error) {
     return "", "", fmt.Errorf("Error occurred during syncing: %v", err)
   }
 
-  token := uuid.New().String()
+  token := uuid.New().String() + uuid.New().String()
   Tokens.Set(token, fmt.Sprintf("%s-%s",email,databaseId), 60 * time.Minute)
 
   CreateDatabase(databaseId)
@@ -122,7 +127,6 @@ func VerifyAccount(email string, code string) error {
 
 func SendVerificationCode(email string) EmailResponse {
   code := genCode()
-  fmt.Printf("Gnerated code: %s, now I am sentting the value into map\n", code)
   emailRes := SendEmail(email, code)
   Codes.Set(email, code, 5 * time.Minute)
   return emailRes 
@@ -198,6 +202,20 @@ func DeleteAccount(email string) error {
   file.Sync()
 
   return nil
+}
+
+
+func HashPassword(password string) (string, error) {
+  bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+  if err != nil {
+    return "", err
+  }
+  return string(bytes), nil
+}
+
+func CheckPasswordHash(password, hash string) bool {
+  err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+  return err == nil
 }
 
 

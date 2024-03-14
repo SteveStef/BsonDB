@@ -22,7 +22,7 @@ type Account struct {
 type Table struct {
   Name string `bson:"name"`
   Requires []string `bson:"requires"`
-  Identifier string `bson:"identifier"`
+  Identifier interface{} `bson:"identifier"`
   EntryTemplate map[string]string `bson:"entrytemplate"`
   Entries map[string]map[string]interface{}`bson:"entries"`
 }
@@ -52,7 +52,7 @@ func ValidateIdentifier(identifier string) string {
 
 type TableDefinition struct {
   Name string
-  Identifier string
+  Identifier interface{}
   Requires []string
   EntryTemplate map[string]string
 }

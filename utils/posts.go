@@ -80,18 +80,11 @@ func DeleteAllTables(dbId string) error {
   }
   defer vm.SSHHandler.ReturnSession(session)
 
-  // Convert tblNames to a map for faster lookup
-/*tblNamesMap := make(map[string]bool)
-  for _, tblName := range tblNames {
-    tblNamesMap[tblName] = true
-  }*/
-
   files, err := session.ReadDir(dirPath)
   if err != nil {
     return fmt.Errorf("Error occurred during reading directory: %v", err)
   }
 
-  // delete all directories that are not in the list of tblNames
   deleteDirs := ""
   for _, file := range files {
     deleteDirs += dirPath + "/" + file.Name() + " "

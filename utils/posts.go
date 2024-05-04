@@ -92,10 +92,11 @@ func DeleteAllTables(dbId string) error {
 
   termSession, err := vm.SSHHandler.GetTermSession()
   if err != nil { return fmt.Errorf("Error occurred during creating the sessions: %v", err) }
-  defer vm.SSHHandler.ReturnTermSession(termSession)
+  //defer vm.SSHHandler.ReturnTermSession(termSession)
   command := fmt.Sprintf("rm -rf %s", deleteDirs)
   err = termSession.Run(command)
   if err != nil { return fmt.Errorf("Error occurred during running command: %v", err) }
+  defer termSession.Close()
 
   return nil
 }

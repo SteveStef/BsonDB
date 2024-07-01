@@ -10,7 +10,12 @@ import (
 	"github.com/joho/godotenv"
   "go.mongodb.org/mongo-driver/bson"
   "BsonDB-API/utils"
+  "strconv"
+  "strings"
 )
+
+// 0 0 0 0 0 0 0 0
+// isUsingBsonDB, 
 
 func Connect() error {
   config, error := vm.DefaultConfig()
@@ -46,7 +51,7 @@ func main() {
 			continue
 		}
 
-		go handleConnection(conn)
+		handleConnection(conn)
 	}
 
   /*
@@ -105,14 +110,26 @@ func handleConnection(conn net.Conn) {
     length, err := conn.Read(buffer)
     if err!= nil {
       fmt.Println("Read error:", err)
+    }
+
+    message := string(buffer[:length])
+    parts := strings.SplitN(message, ":", 2)
+
+    if len(parts) < 2 {
+      fmt.Println("Message does not contain a number.")
       return
     }
-    message := string(buffer[:length])
-    fmt.Println("Received message:", message)
-  }
 
-  // You can add logic here to handle the received message,
-  // such as parsing it and performing actions based on the content.
+    number, convertErr := strconv.Atoi(parts[0])
+    body := parts[1]
+
+    if convertErr != nil {
+      fmt.Println(convertErr)
+    }
+
+    fmt.Println("Received number:", number)
+    fmt.Println("Received body:", body)
+  }
 }
 
 func initF() {

@@ -2,75 +2,15 @@ package main
 
 import (
 	"BsonDB-API/ssh"
-	"BsonDB-API/routes"
-  "BsonDB-API/file-manager"
+	//"BsonDB-API/routes"
+  //"BsonDB-API/file-manager"
 	"fmt"
-	"net/http"
+	"net"
 	"os"
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
   "go.mongodb.org/mongo-driver/bson"
   "BsonDB-API/utils"
 )
-
-func checkRequestSize(c *gin.Context) {
-  const MaxRequestSize = 1048576
-  if c.Request.ContentLength > MaxRequestSize {
-    c.JSON(http.StatusBadRequest, gin.H{"error": "Request size too large"})
-    c.Abort()
-    return
-  }
-  c.Next()
-}
-
-func CORSMiddleware() gin.HandlerFunc {
-  return func(c *gin.Context) {
-    c.Writer.Header().Set("Access-Control-Allow-Origin", "*") // anyone can access my api
-    c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-    c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-    c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-    if c.Request.Method == "OPTIONS" {
-      c.AbortWithStatus(http.StatusNoContent)
-      return
-    }
-    c.Next()
-  }
-}
-
-func CloseConnection(c *gin.Context) {
-  if c.GetHeader("Authorization") != os.Getenv("ADMIN_PASSWORD") {
-    c.JSON(http.StatusUnauthorized, 
-    gin.H{"error": "Unable to access this function"})
-    return
-  }
-
-  vm.SSHHandler.CloseAllSessions()
-  vm.SSHHandler.Open = false;
-  c.JSON(http.StatusOK, gin.H{"message":"Connection to database was closed by admin"})
-}
-
-func Reconnect(c *gin.Context) {
-  if c.GetHeader("Authorization") != os.Getenv("ADMIN_PASSWORD") {
-    c.JSON(http.StatusUnauthorized, 
-    gin.H{"error": "Unable to access this function"})
-    return
-  }
-
-  if vm.SSHHandler.Open {
-    c.JSON(http.StatusOK, gin.H{"message":"Connection to VM is already open"})
-    return
-  }
-
-  err := Connect()
-  if err != nil {
-    c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to re-establish connection to VM"})
-    return
-  }
-
-  vm.SSHHandler.FillSessionPool()
-  vm.SSHHandler.Open = true;
-  c.JSON(http.StatusOK, gin.H{"message":"Connection to VM was re-established"})
-}
 
 func Connect() error {
   config, error := vm.DefaultConfig()
@@ -87,25 +27,29 @@ func Connect() error {
   return nil
 }
 
-func CheckConnectionMiddleware() gin.HandlerFunc {
-  return func(c *gin.Context) {
-    if c.Request.URL.Path == "/Reconnect" {
-      c.Next()
-      return
-    }
-    if !vm.SSHHandler.Open {
-      c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Connection to VM is closed"})
-      c.Abort()
-      return
-    }
-    c.Next()
-  }
-}
-
 func main() {
   err := godotenv.Load()
   if err != nil { fmt.Println("Error loading .env file") }
 
+	listener, err := net.Listen("tcp", ":8080")
+	if err!= nil {
+		fmt.Println("Failed to listen:", err)
+		return
+	}
+	defer listener.Close()
+
+  fmt.Println("Server is listening on port 8080")
+	for {
+		conn, err := listener.Accept()
+		if err!= nil {
+			fmt.Println("Failed to accept connection:", err)
+			continue
+		}
+
+		go handleConnection(conn)
+	}
+
+  /*
   router := gin.Default()
 
   router.SetTrustedProxies(nil)
@@ -147,6 +91,28 @@ func main() {
 
   fmt.Printf("Server started at %s\n", port)
   router.Run(":" + port)
+  */
+
+}
+
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
+
+	// Example of reading from the connection
+	buffer := make([]byte, 1024)
+
+  for {
+    length, err := conn.Read(buffer)
+    if err!= nil {
+      fmt.Println("Read error:", err)
+      return
+    }
+    message := string(buffer[:length])
+    fmt.Println("Received message:", message)
+  }
+
+  // You can add logic here to handle the received message,
+  // such as parsing it and performing actions based on the content.
 }
 
 func initF() {

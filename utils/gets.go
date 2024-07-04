@@ -31,7 +31,12 @@ func GetAllTblNames(dbId string) ([]string, error) {
   return dbs, nil
 }
 
-func GetTable(directoryId string, table string) ([]map[string]interface{}, error) {
+// new stuff
+type TbleSlice struct {
+  Table []map[string]interface{} `bson: "entries"`
+}
+
+func GetTable(directoryId string, table string) ([]byte, error) { // []map[string]interface{}
   filePath := fmt.Sprintf("BsonDB/db_%s/%s", directoryId, table)
   session, err := vm.SSHHandler.GetSession()
   if err != nil {
@@ -87,6 +92,7 @@ func GetTable(directoryId string, table string) ([]map[string]interface{}, error
     close(errorsChan)
   }()
 
+
   entries := []map[string]interface{}{}
   for entry := range entriesChan {
     entries = append(entries, entry)
@@ -100,7 +106,34 @@ func GetTable(directoryId string, table string) ([]map[string]interface{}, error
     }
   }
 
-  return entries, nil
+  tble := TbleSlice{
+    Table: entries,
+  }
+
+  response, posErr := bson.Marshal(tble)
+  if posErr != nil {
+    fmt.Println("error marshaling", posErr)
+    return nil, posErr 
+  }
+  return response, nil
+}
+
+func GetEntryFromTable2(directoryId string, table string, entryId string) ([]byte, error) {
+  filePath := fmt.Sprintf("BsonDB/db_%s/%s/%s.bson", directoryId, table, ValidateIdentifier(entryId))
+  session, error := vm.SSHHandler.GetSession()
+  if error != nil {
+    return nil,fmt.Errorf("Error occurred when creating the sessions: %v", error)
+  }
+  defer vm.SSHHandler.ReturnSession(session)
+
+  file, err := session.Open(filePath)
+  if err != nil { return nil, fmt.Errorf("No entry with identifier of %s", entryId) }
+  defer file.Close()
+
+  output, err := io.ReadAll(file)
+  if err != nil { return nil, fmt.Errorf("Error occurred while reading the file: %v", err) }
+
+  return output, nil
 }
 
 func GetEntryFromTable(directoryId string, table string, entryId string) (map[string]interface{}, error) {
@@ -127,19 +160,29 @@ func GetEntryFromTable(directoryId string, table string, entryId string) (map[st
   return entry, nil
 }
 
-func GetFieldFromEntry(dbId string, table string, entryId string, field string) (interface{}, error) {
+func GetFieldFromEntry(dbId string, table string, entryId string, field string) ([]byte, error) {
   g, err := GetEntryFromTable(dbId, table, entryId)
   if err != nil { return nil, err }
   if _, ok := g[field]; !ok {
     return nil, fmt.Errorf("No field with the name of %s", field)
   }
-  return g[field], nil
+  if fieldValue, ok := g[field].(map[string]interface{}); ok {
+    jsonData, err := bson.Marshal(fieldValue)
+    if err != nil {
+      fmt.Println("Error marshaling field:", err)
+      return nil, err
+    }
+    return jsonData, nil
+  }
+  return []byte(fmt.Sprintf("%v", g[field])), nil
 }
 
 func GetEntriesByFieldValue(dbId string, table string, field string, value interface{}) ([]map[string]interface{}, error) {
-  tableData, err := GetTable(dbId, table)
-
+  tblMarsh, err := GetTable(dbId, table)
   if err != nil { return []map[string]interface{}{}, err }
+  var tableData []map[string]interface{}
+  _ = bson.Unmarshal(tblMarsh, &tableData)
+
   entries := []map[string]interface{}{}
   for _, entry := range tableData {
     if val, ok := entry[field]; ok {

@@ -36,21 +36,5 @@ func DeleteEntryFromTable(dbId string, table string, entryId string) error {
 }
 
 func DeleteBsonFile(dbId string, email string) error {
-
-  err := DeleteAccount(email)
-  if err != nil {
-    return fmt.Errorf("Error occurred during deleting account")
-  }
-
-  filePath := fmt.Sprintf("BsonDB/db_%s", dbId)
-  termSession, err := vm.SSHHandler.GetTermSession()
-  defer vm.SSHHandler.ReturnTermSession(termSession)
-
-  command := fmt.Sprintf("rm -rf %s", filePath)
-  err = termSession.Run(command)
-  if err != nil { 
-    return fmt.Errorf("Error occurred during deleting the database: %v", err) 
-  }
-
   return nil
 }

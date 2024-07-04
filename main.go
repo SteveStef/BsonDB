@@ -6,16 +6,38 @@ import (
   //"BsonDB-API/file-manager"
 	"fmt"
 	"net"
-	"os"
+	//"os"
 	"github.com/joho/godotenv"
-  "go.mongodb.org/mongo-driver/bson"
+  //"go.mongodb.org/mongo-driver/bson"
   "BsonDB-API/utils"
   "strconv"
   "strings"
 )
 
-// 0 0 0 0 0 0 0 0
-// isUsingBsonDB, 
+//mngr.FM = &mngr.FileManager{}
+
+const (
+  INIT_CONNECT int8 = iota // 0
+  MIGRATE_TABLES // 1
+
+  GET_TABLE // 2
+  GET_ENTRY // 3
+  GET_FIELD // 4
+  GET_ENTRIES // 5
+
+  POST_ENTRY // 6
+  PUT_FIELD // 7
+  DEL_ENTRY // 8
+
+  RECONNECT // 9
+  DISCONNECT // 10
+)
+
+type Request struct {
+  conn net.Conn
+  route int8 
+  body []byte
+}
 
 func Connect() error {
   config, error := vm.DefaultConfig()
@@ -50,62 +72,15 @@ func main() {
 			fmt.Println("Failed to accept connection:", err)
 			continue
 		}
-
-		handleConnection(conn)
+    fmt.Println("Client has connected\n")
+		go handleConnection(conn)
 	}
-
-  /*
-  router := gin.Default()
-
-  router.SetTrustedProxies(nil)
-  router.Use(CORSMiddleware())
-  router.Use(CheckConnectionMiddleware())
-
-  apiGroup := router.Group("/api")
-
-  error := Connect() 
-  mngr.FM = &mngr.FileManager{}
-  if error != nil { fmt.Println(error) }
-
-  router.GET("/", route.Root)
-
-  router.GET("/CloseConnection", CloseConnection)
-  router.GET("/Reconnect", Reconnect)
-
-  apiGroup.POST("/database-names", route.GetDatabaseNames)
-  apiGroup.POST("/table", route.GetTable)
-  apiGroup.POST("/entry", route.GetEntry)
-  apiGroup.POST("/field", route.GetField)
-  apiGroup.POST("/entries", route.GetEntriesByFieldValue)
-
-  apiGroup.POST("/account-signup", route.Signup)
-  apiGroup.POST("/account-login", route.Login)
-  apiGroup.POST("/account-verify", route.VerifyAccount)
-  apiGroup.POST("/account-sendVerificationCode", route.SendVerificationCode)
-  apiGroup.GET("/account-FetchLoggedInStatus", route.FetchLoggedInStatus)
-
-  apiGroup.POST("/deletedb", route.DeleteDatabase)
-  apiGroup.POST("/add-entry", checkRequestSize, route.AddEntry)
-
-  apiGroup.POST("/migrate-tables", checkRequestSize, route.MigrateTables)
-  apiGroup.PUT("/update-field", checkRequestSize, route.UpdateField)
-  apiGroup.POST("/delete-entry", route.DeleteEntry)
-
-  port := os.Getenv("PORT")
-  if port == "" { port = "8080" }
-
-  fmt.Printf("Server started at %s\n", port)
-  router.Run(":" + port)
-  */
 
 }
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
-
-	// Example of reading from the connection
 	buffer := make([]byte, 1024)
-
   for {
     length, err := conn.Read(buffer)
     if err!= nil {
@@ -120,42 +95,103 @@ func handleConnection(conn net.Conn) {
       return
     }
 
-    number, convertErr := strconv.Atoi(parts[0])
-    body := parts[1]
+    route, convertErr := strconv.Atoi(parts[0])
+    body := strings.TrimSuffix(parts[1], "\n")
 
     if convertErr != nil {
       fmt.Println(convertErr)
+      return
     }
 
-    fmt.Println("Received number:", number)
-    fmt.Println("Received body:", body)
+    request := Request{
+      conn: conn, 
+      route: int8(route),
+      body: []byte(body),
+    }
+
+    if route <= 10 {
+      go request.processBsonDB()
+    } else {
+      // go request.processRedis()
+    }
+
   }
 }
 
-func initF() {
-  var accounts db.DBAccounts
-  accounts.Accounts = []db.DBAccount{}
-  doc := bson.M{"accounts": accounts.Accounts}
-  data, err := bson.Marshal(doc)
-  if err != nil {
-    return
-  }
-  session, err := vm.SSHHandler.GetSession()
-  if err != nil {
-    return
-  }
-  defer session.Close()
-  path := fmt.Sprintf("BsonDB/Accounts.bson")
-  file, err := session.OpenFile(path, os.O_CREATE|os.O_RDWR)
-  if err != nil {
-    return
-  }
-  defer file.Close()
+func (req *Request) processBsonDB() {
+  dbId := "07677b81-3921-41f9-81f1-1ad65cfb848e"
+  switch req.route {
 
-  file.Truncate(0)
-  file.Seek(0, 0)
-  file.Write(data)
-  file.Sync()
+    case INIT_CONNECT:
+      err := Connect()
+      if err != nil {
+        fmt.Println(err)
+        req.conn.Write([]byte("Unable to connect to the DB"))
+        return
+      }
+      req.conn.Write([]byte("Successfully Connected to the database\n"))
+      return
 
-  return
+    case GET_TABLE:
+      table, err := db.GetTable(dbId, string(req.body))
+      if err != nil {
+        fmt.Println(err)
+        req.conn.Write([]byte("Unable to retrieve table\n"))
+        return
+      }
+      fmt.Println("Successfully got table")
+      req.conn.Write(table)
+      return
+
+    case GET_ENTRY:
+      entryData, err := db.GetEntryFromTable2(dbId, "combatants", "stevestef")
+      if err != nil {
+        fmt.Println(err)
+        req.conn.Write([]byte("Unable to retrieve entry\n"))
+        return
+      }
+      fmt.Println("Successfully got entry")
+      req.conn.Write(entryData)
+      return
+
+    case GET_FIELD:
+      field, err := db.GetFieldFromEntry(dbId, "combatants", "stevestef", "username")
+      if err != nil {
+        fmt.Println(err)
+        req.conn.Write([]byte("Unable to retrieve field\n"))
+        return
+      }
+      req.conn.Write(field)
+      return
+
+    case GET_ENTRIES:
+      // GetEntriesByFieldValue(dbId string, table string, field string, value interface{}) ([]map[string]interface{}, error) {
+      return
+
+    case POST_ENTRY:
+      // func AddEntry(dbId string, table string, entry map[string]interface{}) error
+      return
+
+    case PUT_FIELD:
+      // err := db.UpdateEntry(dbId, table, entryId, obj)
+      return
+
+    case MIGRATE_TABLES:
+      // func MigrateTables(dbId string, tables []Table) error
+      return
+
+    case DEL_ENTRY:
+      //func DeleteEntryFromTable(dbId string, table string, entryId string) error {
+      return
+
+    case RECONNECT:
+      vm.SSHHandler.FillSessionPool()
+      vm.SSHHandler.Open = true;
+      return
+
+    case DISCONNECT:
+      vm.SSHHandler.CloseAllSessions()
+      vm.SSHHandler.Open = false;
+      return
+  }
 }
